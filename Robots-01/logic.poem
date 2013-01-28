@@ -1,0 +1,50 @@
+#lang poem
+
+(provide <logical-object>
+         <primitive-action>
+         parameters
+         precondition
+         effect-axiom
+         assert
+         define-primitive-action)
+
+(defclass* <logical-object> ()
+  :printer #t)
+
+(defentityclass* <primitive-action> ()
+  name
+  parameters
+  precondition
+  effect-axiom
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(define-syntax-rule (assert expression ...)
+  (unless (begin expression ...)
+    (error "Assertion failed: " '(assert expression ...))))
+
+(define-syntax define-primitive-action
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ id exp1
+          :precondition exp2
+          :effect-axiom exp3
+          exp ...)
+       #'(define id
+           (let ((action (make <primitive-action>
+                           :name 'id
+                           :parameters 'exp1
+                           :precondition 'exp2
+                           :effect-axiom 'exp3)))
+             (set-instance-proc! action
+                                 (lambda exp1
+                                   (assert exp2)
+                                   (begin0
+                                       (begin
+                                         exp ...)
+                                     (assert exp3))))
+             action))))))
+
+(defclass* <fluent> ()
+  :printer #t)
