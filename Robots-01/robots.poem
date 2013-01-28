@@ -1,0 +1,19 @@
+#lang poem
+
+(defclass* <pos> ()
+  x y
+  :printer #t
+  :autoaccessors :class-slot
+  :auto #t)
+
+(defclass* <robot> ()
+  (position :initvalue (make-pos 0 0))
+  :printer #t
+  :autoaccessors :class-slot
+  :auto #t)
+
+(defmethod initialize ((self <robot>) initargs)
+  (call-next-method)
+  (when (pair? (robot-position self))
+    (set! (robot-position self)
+          (apply make-pos (robot-position self)))))
