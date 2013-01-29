@@ -1,0 +1,26 @@
+#lang poem
+
+(require rackunit)
+(require "action-theory.poem"
+         "robots.poem")
+
+(test-begin
+ (let ((r1 (make-robot)))
+   (check equals? (position r1) (make-pos 0 0))
+   (move r1 (make-pos 1 2))
+   (check equals? (position r1) (make-pos 1 2))))
+
+(test-begin
+ (let ((r1 (make-robot))
+       (b1 (make-brick)))
+   (check-pred null? (loaded-bricks r1))
+   (check equal? (weight b1) 0.1)
+   (check equal? (max-load r1) 0.5)
+   (check equal? (available-load r1) 0.5)
+   (pick-up r1 b1)
+   (check equal? (loaded-bricks r1) (list b1))
+   (check equal? (weight b1) 0.1)
+   (check equal? (max-load r1) 0.5)
+   (check equal? (available-load r1) 0.4)))
+
+(printf "End of test file!\n")

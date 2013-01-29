@@ -1,0 +1,122 @@
+#lang poem
+
+(require racket/control)
+(provide clear-all-choice-points
+         more-choice-points?
+         amb
+         amb-collect
+         amb-assert
+         fail)
+
+(define all-choice-points '())
+
+(define (clear-all-choice-points)
+  (set! all-choice-points '()))
+
+(define (more-choice-points?)
+  (not (null? all-choice-points)))
+
+(define amb-tag
+  (make-continuation-prompt-tag 'amb-tag))
+
+; (define in-thunk? (make-parameter #f))
+(define (in-thunk?)
+  (continuation-prompt-available? amb-tag))
+
+(define (run-next-thunk)
+  (display "Running next thunk\n")
+  (if (null? all-choice-points)
+      (error "Toplevel fail")
+      (let ((next-thunk (first all-choice-points)))
+        (set! all-choice-points (rest all-choice-points))
+        (next-thunk))))
+
+(define (fail)
+  (cond ((in-thunk?)
+         (printf "In thunk\n")
+         (fcontrol 'fail #:tag amb-tag))
+        (else (run-next-thunk))))
+
+(define (choose . thunks)
+  (let ((choice-points
+         (map  (lambda (t)
+                 (thunk
+                  (% (t)
+                     (lambda (r k)
+                       (run-next-thunk))
+                     #:tag amb-tag)))
+               thunks)))
+    (set! all-choice-points (append choice-points all-choice-points))
+    (run-next-thunk)))
+  
+(define-syntax-rule (amb alt ...)
+  (choose (thunk alt) ...))
+
+(define (amb-assert exp)
+  (unless exp
+    (fail)))
+
+(define (amb-collect)
+  (let loop ((result '()))
+    (if (more-choice-points?)
+        (loop
+         (cons (% (fail) (lambda (r k) r)) result))
+        (reverse result))))
+
+(define (an-integer->= n)
+  (amb n (an-integer->= (+ n 1))))
+
+(define (an-integer-<= n)
+  (amb n (an-integer-<= (- n 1))))
+
+(define (an-integer-between m n)
+  (if (> m n)
+      (fail)
+      (amb m (an-integer-between (+ m 1) n))))
+
+(define (a-multiple-of k)
+  (let ((multiplier (an-integer->= 1)))
+    (* multiplier k)))
+
+(define (an-element-of lst)
+  (if (null? lst)
+      (fail)
+      (amb (car lst) (an-element-of (cdr lst)))))
+
+
+(define (test-01)
+  (clear-all-choice-points)
+  (printf "~a\n" (amb 1 2 3))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail)))
+
+(define (test-02)
+  (clear-all-choice-points)
+  (printf "~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail)))
+
+(define (test-03)
+  (clear-all-choice-points)
+  (printf "~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
+  (printf "~a\n" (amb-collect)))
+
+(define (test-04)
+  (clear-all-choice-points)
+  (let ((x (amb 1 2 3 4 5))
+	(y (amb 2 4 6)))
+    (printf "Trying: ~a\n" (list x y))
+    (if (and (even? x) (even? y)
+	     (>= (+ x y) 7))
+	(list x y)
+	(fail))))
+
+(define (test-05)
+  (clear-all-choice-points)
+  (let ((x (an-integer-between 3 5))
+        (y (an-integer-between 5 8)))
+    (list x y)))
+

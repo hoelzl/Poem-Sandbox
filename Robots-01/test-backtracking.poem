@@ -1,0 +1,9 @@
+#lang poem
+
+(require "backtracking.poem")
+
+(define (test-01)
+  (clear-all-choice-points)
+  (printf "~a\n" (amb 1 2 3))
+  (printf "~a\n" (fail))
+  (printf "~a\n" (fail)))

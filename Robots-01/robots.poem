@@ -1,6 +1,14 @@
 #lang poem
 
-(require "logic.poem")
+(require "backtracking.poem")
+(require "action-theory.poem")
+
+(provide <pos> x y pos? make-pos
+         <physical-object> position physical-object? 
+         <brick> weight brick? make-brick
+         <robot> max-load loaded-bricks robot? make-robot
+         available-load
+         move pick-up)
 
 (defclass* <pos> ()
   x y
@@ -19,36 +27,60 @@
 
 (defclass* <brick> (<physical-object>)
   (weight :initvalue 0.1)
+  :autoaccessors :slot
   :auto #t)
+
+(define all-robots (make-parameter empty))
 
 (defclass* <robot> (<physical-object>)
   (max-load :initvalue 0.5)
   (loaded-bricks :initvalue empty)
+  :autoaccessors :slot
   :auto #t)
 
 (defmethod initialize ((self <robot>) initargs)
   (call-next-method)
+  (all-robots (cons self (all-robots)))
   (when (pair? (position self))
     (set! (position self)
           (apply make-pos (position self)))))
 
-(defentityclass* <move-action> (<primitive-action>))
+(define (sum-all lst)
+  (foldl + 0 lst))
 
-(define-primitive-action move (obj pos)
-  :precondition true
+(define (available-load robot)
+  (- (max-load robot) (sum-all (map weight (loaded-bricks robot)))))
+
+  ;; (let loop ((robots (all-robots)))
+  ;;   (or (amb (first robots))
+  ;;       (loop (rest robots)))))
+
+
+;; (defentityclass* <move-action> (<action>))
+
+(define-action move (obj pos)
+  :precondition (physical-object? obj)
   :effect-axiom (equals? (position obj) pos)
   (set! (position obj) pos)
   obj)
 
-(define-primitive-action bad-move-1 (obj pos)
+(define-action pick-up (robot brick)
+  :precondition (and (robot? robot) (brick? brick)
+                     (>= (available-load robot) (weight brick)))
+  :effect-axiom true
+  (set! (loaded-bricks robot)
+        (cons brick (loaded-bricks robot))))
+
+#||
+(define-action bad-move-1 (obj pos)
   :precondition #f
   :effect-axiom (equals? (position obj) pos)
   (set! (position obj) pos)
   obj)
 
-(define-primitive-action bad-move-2 (obj pos)
+(define-action bad-move-2 (obj pos)
   :precondition true
   :effect-axiom (not (equals? (position obj) pos))
   (set! (position obj) pos)
   obj)
-
+||#

@@ -1,0 +1,92 @@
+#lang poem
+
+(provide <situation>
+         actions
+         current-situation
+         do!
+         <logical-object>
+         <action>
+         name
+         parameters
+         precondition
+         effect-axiom
+         assert
+         define-action
+         <action-instance>
+         action
+         arguments)
+
+;;; TODO: Fix printing.
+
+(define print-situation
+  (lambda (obj rec? &opt [port (current-output-port)])
+    (let ((printer (if rec? write-object display-object)))
+      (printer (format "#<situation: actions=~a>"
+                       (map (lambda (ai)
+                              (format "#<action-instance: ~a arguments=~a>"
+                                      (name (action ai))
+                                      (map (lambda (arg) (format "~a" arg))
+                                           (arguments ai))))
+                            (actions obj)))))))
+
+(defclass* <situation> ()
+  (actions :initvalue empty)
+  :printer print-situation
+  :autoaccessors :slot
+  :auto #t)
+
+(define current-situation (make-parameter (make <situation>)))
+
+(define (do! action situation)
+  (make-situation (cons action (actions situation))))
+
+(defclass* <logical-object> ()
+  :printer #t)
+
+(defentityclass* <action> ()
+  name
+  parameters
+  precondition
+  effect-axiom
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(defclass* <action-instance> ()
+  action
+  arguments
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(define-syntax-rule (assert expression ...)
+  (unless (begin expression ...)
+    (error "Assertion failed: " '(assert expression ...))))
+
+(define-syntax define-action
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ id exp1
+          :precondition exp2
+          :effect-axiom exp3
+          exp ...)
+       #'(define id
+           (let ((act (make <action>
+                           :name 'id
+                           :parameters 'exp1
+                           :precondition 'exp2
+                           :effect-axiom 'exp3)))
+             (set-instance-proc! act
+                                 (lambda exp1
+                                   (assert exp2)
+                                   (current-situation (do! (make-action-instance
+                                                            act (list . exp1))
+                                                           (current-situation)))
+                                   (begin0
+                                       (begin
+                                         exp ...)
+                                     (assert exp3))))
+             act))))))
+
+(defclass* <fluent> ()
+  :printer #t)
