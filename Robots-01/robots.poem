@@ -11,32 +11,37 @@
          move pick-up)
 
 (defclass* <pos> ()
-  x y
+  (x :fluent #t)
+  (y :fluent #t)
   :printer #t
   :autoaccessors :slot
-  :auto #t)
+  :auto #t
+  :metaclass <logical-class>)
 
 (defmethod equals? ((pos1 <pos>) (pos2 <pos>))
   (and (= (x pos1) (x pos2))
        (= (y pos1) (y pos2))))
 
 (defclass* <physical-object> (<logical-object>)
-  (position :initvalue (make-pos 0 0))
+  (position :initvalue (make-pos 0 0) :fluent #t)
   :autoaccessors :slot
-  :auto #t)
+  :auto #t
+  :metaclass <logical-class>)
 
 (defclass* <brick> (<physical-object>)
-  (weight :initvalue 0.1)
+  (weight :initvalue 0.1 :fluent #t)
   :autoaccessors :slot
-  :auto #t)
+  :auto #t
+  :metaclass <logical-class>)
 
 (define all-robots (make-parameter empty))
 
 (defclass* <robot> (<physical-object>)
-  (max-load :initvalue 0.5)
-  (loaded-bricks :initvalue empty)
+  (max-load :initvalue 0.5 :fluent #t)
+  (loaded-bricks :initvalue empty :fluent #t)
   :autoaccessors :slot
-  :auto #t)
+  :auto #t
+  :metaclass <logical-class>)
 
 (defmethod initialize ((self <robot>) initargs)
   (call-next-method)
@@ -64,10 +69,17 @@
   (set! (position obj) pos)
   obj)
 
+(define-action move-up (obj) ;; ((obj <physical-object>))
+  :precondition #t
+  :effect-axiom (equals? (y (position obj))
+                         (+ 1 (@pre (y (position obj)))))
+  (set! (position obj) (+ 1 (position obj))))
+
 (define-action pick-up (robot brick)
   :precondition (and (robot? robot) (brick? brick)
                      (>= (available-load robot) (weight brick)))
-  :effect-axiom true
+  :effect-axiom (equals? (loaded-bricks robot)
+                         (cons brick (@pre (loaded-bricks robot))))
   (set! (loaded-bricks robot)
         (cons brick (loaded-bricks robot))))
 
@@ -84,3 +96,10 @@
   (set! (position obj) pos)
   obj)
 ||#
+
+(define-fluent position
+  (iff (position ?obj ?pos (do ?action ?situation))
+       (or (and (= ?action (move ?obj ?pos)))
+           (and (/= ?action (move ?obj ?pos))
+                (position ?obj ?pos ?situation)))))
+

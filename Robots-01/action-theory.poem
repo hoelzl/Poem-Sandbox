@@ -4,6 +4,7 @@
          actions
          current-situation
          do!
+         <logical-class>
          <logical-object>
          <action>
          name
@@ -12,9 +13,14 @@
          effect-axiom
          assert
          define-action
+         @pre
          <action-instance>
          action
-         arguments)
+         arguments
+         <fluent>
+         axiom
+         all-fluents
+         define-fluent)
 
 ;;; TODO: Fix printing.
 
@@ -39,6 +45,33 @@
 
 (define (do! action situation)
   (make-situation (cons action (actions situation))))
+
+(define all-fluents (make-hash-table))
+
+(defclass* <fluent> ()
+  name
+  axiom
+  :auto #t
+  :autoaccessors :slot
+  :printer #t)
+
+(define (maybe-make-fluent name)
+  (unless (hash-table-get all-fluents name #f)
+    (hash-table-put! all-fluents name (make-fluent name))))
+
+(define-syntax-rule (define-fluent name axiom)
+  (make-fluent 'name 'axiom))
+
+(defclass* <logical-class> (<class>)
+  :printer #t)
+
+(defmethod compute-slots ((class <logical-class>))
+  (let ((slots (call-next-method)))
+    (for ((slot (in-list slots)))
+      (when (getarg (rest slot) :fluent #f)
+        (printf "Creating fluent ~a\n" (first slot))
+        (maybe-make-fluent (first slot))))
+    slots))
 
 (defclass* <logical-object> ()
   :printer #t)
@@ -88,5 +121,5 @@
                                      (assert exp3))))
              act))))))
 
-(defclass* <fluent> ()
-  :printer #t)
+(define (@pre exp)
+  exp)
