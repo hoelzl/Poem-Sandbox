@@ -11,12 +11,11 @@
          move pick-up)
 
 (defclass* <pos> ()
-  (x :fluent #t)
-  (y :fluent #t)
+  x
+  y
   :printer #t
   :autoaccessors :slot
-  :auto #t
-  :metaclass <logical-class>)
+  :auto #t)
 
 (defmethod equals? ((pos1 <pos>) (pos2 <pos>))
   (and (= (x pos1) (x pos2))
@@ -56,50 +55,18 @@
 (define (available-load robot)
   (- (max-load robot) (sum-all (map weight (loaded-bricks robot)))))
 
-  ;; (let loop ((robots (all-robots)))
-  ;;   (or (amb (first robots))
-  ;;       (loop (rest robots)))))
-
-
-;; (defentityclass* <move-action> (<action>))
 
 (define-action move (obj pos)
   :precondition (physical-object? obj)
-  :effect-axiom (equals? (position obj) pos)
-  (set! (position obj) pos)
-  obj)
+  (set! (position obj) pos))
 
 (define-action move-up (obj) ;; ((obj <physical-object>))
   :precondition #t
-  :effect-axiom (equals? (y (position obj))
-                         (+ 1 (@pre (y (position obj)))))
-  (set! (position obj) (+ 1 (position obj))))
+  (set! (position obj) (make-pos  (x (position obj))
+                                  (+ 1 (y (position obj))))))
 
 (define-action pick-up (robot brick)
   :precondition (and (robot? robot) (brick? brick)
                      (>= (available-load robot) (weight brick)))
-  :effect-axiom (equals? (loaded-bricks robot)
-                         (cons brick (@pre (loaded-bricks robot))))
   (set! (loaded-bricks robot)
         (cons brick (loaded-bricks robot))))
-
-#||
-(define-action bad-move-1 (obj pos)
-  :precondition #f
-  :effect-axiom (equals? (position obj) pos)
-  (set! (position obj) pos)
-  obj)
-
-(define-action bad-move-2 (obj pos)
-  :precondition true
-  :effect-axiom (not (equals? (position obj) pos))
-  (set! (position obj) pos)
-  obj)
-||#
-
-(define-fluent position
-  (iff (position ?obj ?pos (do ?action ?situation))
-       (or (and (= ?action (move ?obj ?pos)))
-           (and (/= ?action (move ?obj ?pos))
-                (position ?obj ?pos ?situation)))))
-

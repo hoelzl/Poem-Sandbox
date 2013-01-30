@@ -1,5 +1,7 @@
 #lang poem
 
+(require racket/match)
+
 (provide <situation>
          actions
          current-situation
@@ -12,6 +14,8 @@
          precondition
          effect-axiom
          assert
+         all-action-names
+         action-name? get-action
          define-action
          @pre
          <action-instance>
@@ -19,7 +23,8 @@
          arguments
          <fluent>
          axiom
-         all-fluents
+         all-fluent-names
+         fluent-name? get-fluent
          define-fluent)
 
 ;;; TODO: Fix printing.
@@ -46,7 +51,13 @@
 (define (do! action situation)
   (make-situation (cons action (actions situation))))
 
-(define all-fluents (make-hash-table))
+(define all-fluent-names (make-hash-table))
+
+(define (fluent-name? name)
+  (and (hash-table-get all-fluent-names name #f) #t))
+
+(define (get-fluent name)
+  (hash-table-get all-fluent-names name))
 
 (defclass* <fluent> ()
   name
@@ -56,8 +67,8 @@
   :printer #t)
 
 (define (maybe-make-fluent name)
-  (unless (hash-table-get all-fluents name #f)
-    (hash-table-put! all-fluents name (make-fluent name))))
+  (unless (hash-table-get all-fluent-names name #f)
+    (hash-table-put! all-fluent-names name (make-fluent name))))
 
 (define-syntax-rule (define-fluent name axiom)
   (make-fluent 'name 'axiom))
@@ -69,12 +80,20 @@
   (let ((slots (call-next-method)))
     (for ((slot (in-list slots)))
       (when (getarg (rest slot) :fluent #f)
-        (printf "Creating fluent ~a\n" (first slot))
+        ;; (printf "Creating fluent ~a\n" (first slot))
         (maybe-make-fluent (first slot))))
     slots))
 
 (defclass* <logical-object> ()
   :printer #t)
+
+(define all-action-names (make-hash-table))
+
+(define (action-name? name)
+  (and (hash-table-get all-action-names name #f) #t))
+
+(define (get-action name)
+  (hash-table-get all-action-names name))
 
 (defentityclass* <action> ()
   name
@@ -84,6 +103,10 @@
   :printer #t
   :autoaccessors :slot
   :auto #t)
+
+(defmethod initialize ((action <action>) initargs)
+  (call-next-method)
+  (hash-table-put! all-action-names (name action) action))
 
 (defclass* <action-instance> ()
   action
@@ -96,30 +119,84 @@
   (unless (begin expression ...)
     (error "Assertion failed: " '(assert expression ...))))
 
+(define (convert-to-axiom lst)
+  (match lst
+    ((list exp ...) (list (convert-to-axiom exp) 'xxx))
+    (any any)))
+
 (define-syntax define-action
   (lambda (stx)
     (syntax-case stx ()
       ((_ id exp1
           :precondition exp2
-          :effect-axiom exp3
           exp ...)
        #'(define id
            (let ((act (make <action>
-                           :name 'id
-                           :parameters 'exp1
-                           :precondition 'exp2
-                           :effect-axiom 'exp3)))
+                        :name 'id
+                        :parameters 'exp1
+                        :precondition 'exp2
+                        :effect-axiom (convert-to-axiom '(exp ...)))))
              (set-instance-proc! act
                                  (lambda exp1
                                    (assert exp2)
                                    (current-situation (do! (make-action-instance
                                                             act (list . exp1))
                                                            (current-situation)))
-                                   (begin0
-                                       (begin
-                                         exp ...)
-                                     (assert exp3))))
-             act))))))
+                                   exp ... ))
+             act)))
+      ((_ id exp1 exp ...)
+       #'(define-action id exp1 :precondition true exp ...)))))
 
 (define (@pre exp)
   exp)
+
+
+;;; TODO: Argument list for fluent?
+;;; Declare sorts for each type of logical objects
+;;; Declare constructors for each sort
+
+(define (generate-domain-theory)
+  (generate-successor-state-axioms))
+
+(define (generate-successor-state-axioms)
+  (for ((fluent-name (in-hash-keys all-fluent-names)))
+    (generate-successor-state-axiom-for-fluent fluent-name)))
+
+(defclass <successor-state-part> ()
+  axiom-head
+  previous-value
+  :autoaccessors #t
+  :auto #t)
+
+#||
+;; (generate-successor-state-axiom-for-fluent position)
+(effect-axiom (get-action 'move))
+  => (equals? (position obj) pos)
+(make-successor-state-part '(position obj (do (move obj pos) sit))
+                           'pos)
+(effect-axiom (get-action 'move-up))
+  => (equals? (position obj)
+              (make-position (@pre (x (position obj)))
+                             (+ 1 (@pre (y (position obj))))))
+(make-successor-state-part '(position obj (do (move-up obj) sit))
+                           '(make-position (x (position obj sit))
+                                           (+ 1 (y (position obj sit)))))
+||#
+
+(define (generate-successor-state-axiom-for-fluent fluent-name)
+  (let ((parts (generate-successor-state-parts-for-fluent fluent-name)))
+    (build-successor-state-axiom-from-parts parts)))
+
+(define (generate-successor-state-parts-for-fluent fluent-name)
+  (for/list (((action-name action) (in-hash all-action-names)))
+    (let-values (((relevant? new-formula previous-formula)
+                  (extract-successor-state-parts action fluent-name)))
+      #:break (not relevant?)
+      (make-successor-state-part new-formula previous-formula))))
+
+(define (build-successor-state-axiom-from-parts)
+  #f)
+
+(define (extract-successor-state-parts action fluent-name)
+  #f)
+
