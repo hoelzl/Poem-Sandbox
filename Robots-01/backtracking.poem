@@ -4,9 +4,13 @@
 (provide clear-all-choice-points
          more-choice-points?
          amb
-         amb-collect
+         bag-of
          amb-assert
          fail)
+
+(defstruct <choice-point> ()
+  prompt-tag
+  cont)
 
 (define all-choice-points '())
 
@@ -16,52 +20,133 @@
 (define (more-choice-points?)
   (not (null? all-choice-points)))
 
-(define amb-tag
-  (make-continuation-prompt-tag 'amb-tag))
+(define default-error-proc (thunk (error "No next choice point")))
 
-; (define in-thunk? (make-parameter #f))
-(define (in-thunk?)
-  (continuation-prompt-available? amb-tag))
-
-(define (run-next-thunk)
-  (display "Running next thunk\n")
+(define (next-choice-point &opt (error-proc default-error-proc))
+  ;; (printf "Called next-choice-point\n")
   (if (null? all-choice-points)
-      (error "Toplevel fail")
-      (let ((next-thunk (first all-choice-points)))
+      (error-proc)
+      (let ((first-cp (first all-choice-points)))
+	;; (printf "Returning choice point ~a\n" first-cp)
         (set! all-choice-points (rest all-choice-points))
-        (next-thunk))))
+        first-cp)))
 
-(define (fail)
-  (cond ((in-thunk?)
-         (printf "In thunk\n")
-         (fcontrol 'fail #:tag amb-tag))
-        (else (run-next-thunk))))
+(define (fail-handler)
+  ;; (printf "Calling fail-handler\n")
+  (abort-current-continuation
+   (default-continuation-prompt-tag)
+   call-next-choice-point))
 
-(define (choose . thunks)
-  (let ((choice-points
-         (map  (lambda (t)
-                 (thunk
-                  (% (t)
-                     (lambda (r k)
-                       (run-next-thunk))
-                     #:tag amb-tag)))
-               thunks)))
-    (set! all-choice-points (append choice-points all-choice-points))
-    (run-next-thunk)))
+(define (call-next-choice-point &opt (error-proc default-error-proc))
+  ;; (printf "Calling call-next-choice-point\n")
+  (define cp (next-choice-point error-proc))
+  (cond (cp
+	 ;; (printf "Found choice point\n")
+	 (let ((prompt-tag (choice-point-prompt-tag cp))
+	       (proc (choice-point-cont cp)))
+	   (call-with-continuation-prompt proc prompt-tag fail-handler)))
+	(else
+	 ;; (printf "call-next-choice-point: no next choice point\n")
+	 (error-proc))))
   
+(define (fail)
+  ;; (printf "Called fail\n")
+  ;; (printf "Choice points: ~a\n" all-choice-points)
+  (abort-current-continuation
+   (default-continuation-prompt-tag)
+   call-next-choice-point))
+
+(define (make-fail-once-proc)
+  (define failed? #f)
+  (thunk
+   (cond ((failed?)
+	  ;; (printf "fail-once: failed before\n")
+	  (values))
+	 (else
+	  ;; (printf "fail-once: failing for the first time\n")
+	  (set! failed? #t)
+	  (fail)))))
+
+(define failed-call-sites (make-hash-table))
+
+(define-syntax fail-once
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_) (let ((id (gensym)))
+	     #`(unless (hash-table-get failed-call-sites '#,id #f)
+		 (hash-table-put! failed-call-sites '#,id #t
+				  )
+		 (fail)))))))
+
+; (fail-once)
+
+(define (choose form . thunks)
+  (define tag (make-continuation-prompt-tag))
+  (call-with-composable-continuation
+   (lambda (comp)
+     (let ((new-cps (map (lambda (proc)
+			   (define new-cont
+			     (thunk
+			      ;; (printf "~a: Calling stored cont\n" form)
+			      (comp (proc))))
+			   (choice-point tag new-cont))
+			 thunks)))
+       (set! all-choice-points
+	     (append new-cps all-choice-points)))
+     (call-next-choice-point))))
+
+
 (define-syntax-rule (amb alt ...)
-  (choose (thunk alt) ...))
+  (choose '(amb alt ...) (thunk alt) ...))
 
 (define (amb-assert exp)
   (unless exp
     (fail)))
 
-(define (amb-collect)
-  (let loop ((result '()))
-    (if (more-choice-points?)
-        (loop
-         (cons (% (fail) (lambda (r k) r)) result))
-        (reverse result))))
+(define-syntax-rule (bag-of exp)
+  (begin
+    ;; TODO: Maybe parameterize this?
+    (clear-all-choice-points)
+    (letrec ((bag-of-handler
+	      (lambda (res)
+		;; (printf "Called bag-of-handler ~a\n" res)
+		(call-with-continuation-prompt
+		 res
+		 (default-continuation-prompt-tag)
+		 bag-of-handler))))
+      (let ((saved-error-proc default-error-proc)
+	    (result '()))
+	(call-with-current-continuation
+	 (lambda (exit)
+	   (set! default-error-proc 
+	     (lambda ()
+	       ;; (printf "Calling exit procedure\n")
+	       (set! default-error-proc saved-error-proc)
+	       ;; (printf "Calling exit\n")
+	       (exit (void))))
+	   (let* ((init-value (call-with-continuation-prompt
+			       (thunk exp)
+			       (default-continuation-prompt-tag)
+			       bag-of-handler)))
+	     (unless (void? init-value)
+	       (set! result (list init-value)))
+	     (define (loop)
+	       ;; (printf "Starting loop with result = ~a\n" result)
+	       ;; (printf "Number of choice points = ~a\n" (length all-choice-points))
+	       (if (more-choice-points?)
+		   (let ((value (call-with-continuation-prompt
+				 call-next-choice-point
+				 (default-continuation-prompt-tag)
+				 bag-of-handler)))
+		     ;; (printf "Got value ~a\n" value)
+		     (unless (void? value)
+		       (set! result (cons value result)))
+		     (abort-current-continuation
+		      (default-continuation-prompt-tag)
+		      loop))
+		   (reverse result)))
+	     (begin0 (loop)
+	       (set! default-error-proc saved-error-proc)))))))))
 
 (define (an-integer->= n)
   (amb n (an-integer->= (+ n 1))))
@@ -84,39 +169,104 @@
       (amb (car lst) (an-element-of (cdr lst)))))
 
 
-(define (test-01)
+(define (test-11)
   (clear-all-choice-points)
-  (printf "~a\n" (amb 1 2 3))
-  (printf "~a\n" (fail))
-  (printf "~a\n" (fail)))
+  (printf "Value: ~a\n" (amb 1 2 3))
+  (printf "Before failing in test-11\n")
+  (fail-once)
+  (printf "After failing in test-11\n"))
 
-(define (test-02)
+(define (test-11a)
   (clear-all-choice-points)
-  (printf "~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
-  (printf "~a\n" (fail))
-  (printf "~a\n" (fail))
-  (printf "~a\n" (fail))
-  (printf "~a\n" (fail))
-  (printf "~a\n" (fail)))
+  (printf "Value: ~a\n" (amb 1 2 3))
+  (printf "Before failing in test-11a\n")
+  (fail-once)
+  (fail-once)
+  (printf "After failing in test-11a\n"))
 
-(define (test-03)
+(define (test-12)
   (clear-all-choice-points)
-  (printf "~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
-  (printf "~a\n" (amb-collect)))
+  (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
+  (fail-once)
+  (fail-once)
+  (fail-once)
+  (fail-once)
+  (fail-once))
 
-(define (test-04)
+(define (test-13)
+  (clear-all-choice-points)
+  (bag-of (amb 1 2 (amb 'a 'b 'c) 3)))
+
+(define (test-13a)
+  (clear-all-choice-points)
+  (bag-of (an-integer-between 3 6)))
+
+(define (test-13b)
+  (clear-all-choice-points)
+  (bag-of (let ((x (an-integer-between 3 6)))
+		 x)))
+
+(define (test-13c)
+  (clear-all-choice-points)
+  (bag-of (let ((x (an-integer-between 3 6)))
+		 (if (even? x)
+		     x
+		     (fail)))))
+
+(define (test-13d)
+  (clear-all-choice-points)
+  (bag-of (amb 1 (fail) 2)))
+
+(define (test-13e)
+  (clear-all-choice-points)
+  (bag-of (amb (fail) 1 2)))
+
+(define (test-13f)
+  (clear-all-choice-points)
+  (bag-of (amb 1 (fail) 2 3 4)))
+
+(define (test-13g)
+  (clear-all-choice-points)
+  (bag-of (amb 1 (fail) 2 3 4 (fail))))
+
+(define (test-13h)
+  (clear-all-choice-points)
+  (bag-of (let ((x (amb 3 4 5 6)))
+		 (if (even? x)
+		     x
+		     (fail)))))
+
+(define (test-14)
   (clear-all-choice-points)
   (let ((x (amb 1 2 3 4 5))
 	(y (amb 2 4 6)))
     (printf "Trying: ~a\n" (list x y))
     (if (and (even? x) (even? y)
 	     (>= (+ x y) 7))
-	(list x y)
+	(printf "Result: ~a\n" (list x y))
 	(fail))))
 
-(define (test-05)
+(define (test-14a)
   (clear-all-choice-points)
-  (let ((x (an-integer-between 3 5))
-        (y (an-integer-between 5 8)))
-    (list x y)))
+  (bag-of
+   (let ((x (amb 1 2 3 4 5))
+	 (y (amb 2 4 6)))
+     (printf "Trying: ~a\n" (list x y))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))
 
+(define (gen-numbers)
+  (let ((x (amb 1 2 3 4 5))
+	(y (amb 2 4 6)))
+    (printf "Trying: ~a\n" (list x y))
+    (if (and (even? x) (even? y)
+	     (>= (+ x y) 7))
+	(printf "Result: ~a\n" (list x y))
+	(fail))))
+
+(define (test-14b)
+  (clear-all-choice-points)
+  (bag-of
+   (gen-numbers)))
