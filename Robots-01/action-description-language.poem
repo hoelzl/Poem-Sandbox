@@ -1,0 +1,20 @@
+#lang poem
+
+(require redex)
+
+(provide adl)
+
+;;; Definition of the action description language
+
+(define-language adl
+  ;;; Assignments
+  (assign ::= (set! fluent value))
+  ;;; Fluents
+  (fluent ::= (fluent-name id ...))
+  ;;; Fluent names
+  (fluent-name ::= (fluent id))
+  ;;; 
+  ;;; Variables
+  (id     ::= variable-not-otherwise-mentioned))
+
+

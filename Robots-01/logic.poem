@@ -1,0 +1,34 @@
+#lang poem
+
+(defclass <relation> ()
+  name 
+  clauses
+  :autoaccessors :slot
+  :auto #t)
+
+(defclass <logic-variable> ()
+  name
+  value
+  :autoaccessors :slot)
+
+(define (make-logic-variable (name (gensym)))
+  (make <logic-variable>))
+
+
+;;; TODO: Add missing data structures to contains.
+(define (contains elt tree) 
+  (cond ((null? tree) #f)
+	((eq? elt tree) #t)
+	((pair? tree)
+	 (or (contains elt (car tree)) (contains elt (cdr tree))))
+	((vector? tree)
+	 (for/and ((subtree (in-vector tree)))
+	   (contains elt subtree)))))
+
+(defmethod unify (term1 term2)
+  '())
+
+(define v1 (make-logic-variable 'v1))
+(define v2 (make-logic-variable 'v2))
+(unify v1 '(p 1 v2))
+; => ((v1 `(p ,v2)))

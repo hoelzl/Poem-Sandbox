@@ -5,7 +5,7 @@
 	 unfail-all-callsites
 	 set-default-error-proc!
          more-choice-points?
-         choose amb
+         create-choice-points amb
          fail fail-once
          bag-of
          amb-assert
@@ -42,20 +42,24 @@
         (set! all-choice-points (rest all-choice-points))
         first-cp)))
 
-
-(define-syntax abort/cp
+(define-syntax maybe-abort/cc
   (syntax-rules ()
-    ((_ cp exp)
-     (abort-current-continuation
-      (choice-point-prompt-tag cp)
-      exp))))
+    ((_ tag exp)
+     (if (continuation-prompt-available? tag)
+	 (abort/cc tag exp)
+	 (exp)))))
 
 (define-syntax abort/default
   (syntax-rules ()
     ((_ exp)
-     (abort-current-continuation
+     (abort/cc
       (default-continuation-prompt-tag)
       exp))))
+
+(define-syntax maybe-abort/default
+  (syntax-rules ()
+    ((_ exp)
+     (maybe-abort/cc (default-continuation-prompt-tag) exp))))
 
 ;;; TODO: `fail-handler' and `fail' are exactly the same...
 
@@ -127,7 +131,7 @@
 
 ; (fail-once)
 
-(define (choose form . thunks)
+(define (create-choice-points form . thunks)
   (define tag (make-continuation-prompt-tag))
   (call-with-composable-continuation
    (lambda (comp)
@@ -147,7 +151,7 @@
      (call-next-choice-point))))
 
 (define-syntax-rule (amb alt ...)
-  (choose '(amb alt ...) (thunk alt) ...))
+  (create-choice-points '(amb alt ...) (thunk alt) ...))
 
 (define (amb-assert exp)
   (unless exp

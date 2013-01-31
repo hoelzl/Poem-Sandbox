@@ -1,0 +1,7 @@
+#lang poem
+
+(require rackunit)
+(require "logic.poem")
+
+(test-begin
+ (check-true (contains? 1 '(1 2 3))))

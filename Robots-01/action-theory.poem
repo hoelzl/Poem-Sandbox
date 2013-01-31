@@ -1,11 +1,10 @@
 #lang poem
 
-(require racket/match)
-
 (provide <situation>
          actions
          current-situation
          do!
+	 copy-situation
          <logical-class>
          <logical-object>
          <action>
@@ -50,6 +49,9 @@
 
 (define (do! action situation)
   (make-situation (cons action (actions situation))))
+
+(define (copy-situation situation)
+  (make-situation (actions situation)))
 
 (define all-fluent-names (make-hash))
 
@@ -120,9 +122,7 @@
     (error "Assertion failed: " '(assert expression ...))))
 
 (define (convert-to-axiom lst)
-  (match lst
-    ((list exp ...) (list (convert-to-axiom exp) 'xxx))
-    (any any)))
+  'nyi)
 
 (define-syntax define-action
   (lambda (stx)
