@@ -2,11 +2,15 @@
 
 (require racket/control)
 (provide clear-all-choice-points
+	 unfail-all-callsites
+	 set-default-error-proc!
          more-choice-points?
-         amb
+         choose amb
+         fail fail-once
          bag-of
          amb-assert
-         fail)
+	 an-integer->= an-integer-<= an-integer-between
+	 a-multiple-of an-element-of)
 
 (defstruct <choice-point> ()
   prompt-tag
@@ -25,6 +29,9 @@
   (not (null? all-choice-points)))
 
 (define default-error-proc (thunk (error "No next choice point")))
+
+(define (set-default-error-proc! proc)
+  (set! default-error-proc proc))
 
 (define (next-choice-point (error-proc default-error-proc))
   ;; (printf "Called next-choice-point\n")
@@ -161,10 +168,10 @@
 	    (result '()))
 	(call-with-current-continuation
 	 (lambda (exit)
-	   (set! default-error-proc 
+	   (set-default-error-proc!
 	     (lambda ()
 	       ;; (printf "Calling exit procedure\n")
-	       (set! default-error-proc saved-error-proc)
+	       (set-default-error-proc! saved-error-proc)
 	       ;; (printf "Calling exit\n")
 	       (exit (void))))
 	   (let* ((init-value (call-with-continuation-prompt
@@ -187,7 +194,7 @@
 		     (abort/default loop))
 		   (reverse result)))
 	     (begin0 (loop)
-	       (set! default-error-proc saved-error-proc)))))))))
+	       (set-default-error-proc! saved-error-proc)))))))))
 
 (define (an-integer->= n)
   (amb n (an-integer->= (+ n 1))))
@@ -209,129 +216,3 @@
       (fail)
       (amb (car lst) (an-element-of (cdr lst)))))
 
-
-(define (test-11)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Value: ~a\n" (amb 1 2 3))
-  (printf "Before failing in test-11\n")
-  (fail-once)
-  (printf "After failing in test-11\n"))
-
-(define (test-11a)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Value: ~a\n" (amb 1 2 3))
-  (printf "Before failing in test-11a\n")
-  (fail-once)
-  (fail-once)
-  (printf "After failing in test-11a\n"))
-
-(define (test-12)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
-  (fail-once)
-  (fail-once)
-  (fail-once)
-  (fail-once)
-  (fail-once))
-
-(define (test-13)
-  (clear-all-choice-points)
-  (bag-of (amb 1 2 (amb 'a 'b 'c) 3)))
-
-(define (test-13a)
-  (clear-all-choice-points)
-  (bag-of (an-integer-between 3 6)))
-
-(define (test-13b)
-  (clear-all-choice-points)
-  (bag-of (let ((x (an-integer-between 3 6)))
-		 x)))
-
-(define (test-13c)
-  (clear-all-choice-points)
-  (bag-of (let ((x (an-integer-between 3 6)))
-		 (if (even? x)
-		     x
-		     (fail)))))
-
-(define (test-13d)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2)))
-
-(define (test-13e)
-  (clear-all-choice-points)
-  (bag-of (amb (fail) 1 2)))
-
-(define (test-13f)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2 3 4)))
-
-(define (test-13g)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2 3 4 (fail))))
-
-(define (test-13h)
-  (clear-all-choice-points)
-  (bag-of (let ((x (amb 3 4 5 6)))
-		 (if (even? x)
-		     x
-		     (fail)))))
-
-(define (test-14)
-  (clear-all-choice-points)
-  (let ((x (amb 1 2 3 4 5))
-	(y (amb 2 4 6)))
-    (printf "Trying: ~a\n" (list x y))
-    (if (and (even? x) (even? y)
-	     (>= (+ x y) 7))
-	(printf "Result: ~a\n" (list x y))
-	(fail))))
-
-(define (test-14a)
-  (clear-all-choice-points)
-  (bag-of
-   (let ((x (amb 1 2 3 4 5))
-	 (y (amb 2 4 6)))
-     (printf "Trying: ~a\n" (list x y))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
-
-(define (gen-numbers)
-  (let ((x (amb 1 2 3 4 5))
-	(y (amb 2 4 6)))
-    (printf "Trying: ~a\n" (list x y))
-    (if (and (even? x) (even? y)
-	     (>= (+ x y) 7))
-	(printf "Result: ~a\n" (list x y))
-	(fail))))
-
-(define (test-14b)
-  (clear-all-choice-points)
-  (bag-of
-   (gen-numbers)))
-
-(define-syntax-rule (tests id ...)
-  (list (list 'id 
-	      (thunk
-	       (printf "Test Result: ~a\n"
-		       (call-with-continuation-prompt
-			id
-			(default-continuation-prompt-tag))))) ...))
-
-(define all-tests
-  (tests test-11 test-11a
-	 test-12 
-	 test-13 test-13a test-13b test-13c test-13d
-	 test-13e test-13f test-13g test-13h
-	 test-14 test-14a))
-
-(define (run-all-tests)
-  (for-each (lambda (test)
-	      (printf "\n\nCalling test ~a\n" (first test))
-	      ((second test)))
-	    all-tests))
