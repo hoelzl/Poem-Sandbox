@@ -100,7 +100,7 @@
     (printf "Trying: ~a\n" (list x y))
     (if (and (even? x) (even? y)
 	     (>= (+ x y) 7))
-	(printf "Result: ~a\n" (list x y))
+	(list x y)
 	(fail))))
 
 (define (test-14b)
@@ -121,7 +121,7 @@
 	 test-12 
 	 test-13 test-13a test-13b test-13c test-13d
 	 test-13e test-13f test-13g test-13h
-	 test-14 test-14a))
+	 test-14 test-14a test-14b))
 
 (define (run-all-tests)
   (for-each (lambda (test)
