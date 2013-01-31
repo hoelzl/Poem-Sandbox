@@ -10,7 +10,7 @@
          available-load
          move pick-up)
 
-(defclass* <pos> ()
+(defclass <pos> ()
   x
   y
   :printer #t
@@ -21,13 +21,13 @@
   (and (= (x pos1) (x pos2))
        (= (y pos1) (y pos2))))
 
-(defclass* <physical-object> (<logical-object>)
+(defclass <physical-object> (<logical-object>)
   (position :initvalue (make-pos 0 0) :fluent #t)
   :autoaccessors :slot
   :auto #t
   :metaclass <logical-class>)
 
-(defclass* <brick> (<physical-object>)
+(defclass <brick> (<physical-object>)
   (weight :initvalue 0.1 :fluent #t)
   :autoaccessors :slot
   :auto #t
@@ -35,7 +35,7 @@
 
 (define all-robots (make-parameter empty))
 
-(defclass* <robot> (<physical-object>)
+(defclass <robot> (<physical-object>)
   (max-load :initvalue 0.5 :fluent #t)
   (loaded-bricks :initvalue empty :fluent #t)
   :autoaccessors :slot
@@ -46,8 +46,8 @@
   (call-next-method)
   (all-robots (cons self (all-robots)))
   (when (pair? (position self))
-    (set! (position self)
-          (apply make-pos (position self)))))
+    (setf! (position self)
+	   (apply make-pos (position self)))))
 
 (define (sum-all lst)
   (foldl + 0 lst))
@@ -58,15 +58,15 @@
 
 (define-action move (obj pos)
   :precondition (physical-object? obj)
-  (set! (position obj) pos))
+  (setf! (position obj) pos))
 
 (define-action move-up (obj) ;; ((obj <physical-object>))
   :precondition #t
-  (set! (position obj) (make-pos  (x (position obj))
+  (setf! (position obj) (make-pos  (x (position obj))
                                   (+ 1 (y (position obj))))))
 
 (define-action pick-up (robot brick)
   :precondition (and (robot? robot) (brick? brick)
                      (>= (available-load robot) (weight brick)))
-  (set! (loaded-bricks robot)
-        (cons brick (loaded-bricks robot))))
+  (setf! (loaded-bricks robot)
+	 (cons brick (loaded-bricks robot))))

@@ -22,7 +22,7 @@
 
 (define default-error-proc (thunk (error "No next choice point")))
 
-(define (next-choice-point &opt (error-proc default-error-proc))
+(define (next-choice-point (error-proc default-error-proc))
   ;; (printf "Called next-choice-point\n")
   (if (null? all-choice-points)
       (error-proc)
@@ -37,7 +37,7 @@
    (default-continuation-prompt-tag)
    call-next-choice-point))
 
-(define (call-next-choice-point &opt (error-proc default-error-proc))
+(define (call-next-choice-point (error-proc default-error-proc))
   ;; (printf "Calling call-next-choice-point\n")
   (define cp (next-choice-point error-proc))
   (cond (cp
@@ -67,15 +67,14 @@
 	  (set! failed? #t)
 	  (fail)))))
 
-(define failed-call-sites (make-hash-table))
+(define failed-call-sites (make-hash))
 
 (define-syntax fail-once
   (lambda (stx)
     (syntax-case stx ()
       ((_) (let ((id (gensym)))
-	     #`(unless (hash-table-get failed-call-sites '#,id #f)
-		 (hash-table-put! failed-call-sites '#,id #t
-				  )
+	     #`(unless (hash-ref failed-call-sites '#,id #f)
+		 (hash-set! failed-call-sites '#,id #t)
 		 (fail)))))))
 
 ; (fail-once)
@@ -94,7 +93,6 @@
        (set! all-choice-points
 	     (append new-cps all-choice-points)))
      (call-next-choice-point))))
-
 
 (define-syntax-rule (amb alt ...)
   (choose '(amb alt ...) (thunk alt) ...))
@@ -270,3 +268,24 @@
   (clear-all-choice-points)
   (bag-of
    (gen-numbers)))
+
+(define-syntax-rule (tests id ...)
+  (list (list 'id 
+	      (thunk
+	       (printf "Result: ~a\n"
+		       (call-with-continuation-prompt
+			id
+			(default-continuation-prompt-tag))))) ...))
+
+(define all-tests
+  (tests test-11 test-11a
+	 test-12 
+	 test-13 test-13a test-13b test-13c test-13d
+	 test-13e test-13f test-13g test-13h
+	 test-14 test-14a))
+
+(define (run-all-tests)
+  (for-each (lambda (test)
+	      (printf "\n\nCalling test ~a\n" (first test))
+	      ((second test)))
+	    all-tests))

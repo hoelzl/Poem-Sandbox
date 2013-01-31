@@ -40,7 +40,7 @@
                                            (arguments ai))))
                             (actions obj)))))))
 
-(defclass* <situation> ()
+(defclass <situation> ()
   (actions :initvalue empty)
   :printer print-situation
   :autoaccessors :slot
@@ -51,15 +51,15 @@
 (define (do! action situation)
   (make-situation (cons action (actions situation))))
 
-(define all-fluent-names (make-hash-table))
+(define all-fluent-names (make-hash))
 
 (define (fluent-name? name)
-  (and (hash-table-get all-fluent-names name #f) #t))
+  (and (hash-ref all-fluent-names name #f) #t))
 
 (define (get-fluent name)
-  (hash-table-get all-fluent-names name))
+  (hash-ref all-fluent-names name))
 
-(defclass* <fluent> ()
+(defclass <fluent> ()
   name
   axiom
   :auto #t
@@ -67,13 +67,13 @@
   :printer #t)
 
 (define (maybe-make-fluent name)
-  (unless (hash-table-get all-fluent-names name #f)
-    (hash-table-put! all-fluent-names name (make-fluent name))))
+  (unless (hash-ref all-fluent-names name #f)
+    (hash-set! all-fluent-names name (make-fluent name))))
 
 (define-syntax-rule (define-fluent name axiom)
   (make-fluent 'name 'axiom))
 
-(defclass* <logical-class> (<class>)
+(defclass <logical-class> (<class>)
   :printer #t)
 
 (defmethod compute-slots ((class <logical-class>))
@@ -84,18 +84,18 @@
         (maybe-make-fluent (first slot))))
     slots))
 
-(defclass* <logical-object> ()
+(defclass <logical-object> ()
   :printer #t)
 
-(define all-action-names (make-hash-table))
+(define all-action-names (make-hash))
 
 (define (action-name? name)
-  (and (hash-table-get all-action-names name #f) #t))
+  (and (hash-ref all-action-names name #f) #t))
 
 (define (get-action name)
-  (hash-table-get all-action-names name))
+  (hash-ref all-action-names name))
 
-(defentityclass* <action> ()
+(defentityclass <action> ()
   name
   parameters
   precondition
@@ -106,9 +106,9 @@
 
 (defmethod initialize ((action <action>) initargs)
   (call-next-method)
-  (hash-table-put! all-action-names (name action) action))
+  (hash-set! all-action-names (name action) action))
 
-(defclass* <action-instance> ()
+(defclass <action-instance> ()
   action
   arguments
   :printer #t
@@ -191,7 +191,7 @@
   (for/list (((action-name action) (in-hash all-action-names)))
     (let-values (((relevant? new-formula previous-formula)
                   (extract-successor-state-parts action fluent-name)))
-      #:break (not relevant?)
+      ; #:break (not relevant?)
       (make-successor-state-part new-formula previous-formula))))
 
 (define (build-successor-state-axiom-from-parts)
