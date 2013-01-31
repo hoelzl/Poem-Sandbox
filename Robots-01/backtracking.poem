@@ -10,7 +10,11 @@
 
 (defstruct <choice-point> ()
   prompt-tag
+  proc
   cont)
+
+(define (invoke-choice-point cp)
+  ((choice-point-cont cp) ((choice-point-proc cp))))
 
 (define all-choice-points '())
 
@@ -31,11 +35,26 @@
         (set! all-choice-points (rest all-choice-points))
         first-cp)))
 
+
+(define-syntax abort/cp
+  (syntax-rules ()
+    ((_ cp exp)
+     (abort-current-continuation
+      (choice-point-prompt-tag cp)
+      exp))))
+
+(define-syntax abort/default
+  (syntax-rules ()
+    ((_ exp)
+     (abort-current-continuation
+      (default-continuation-prompt-tag)
+      exp))))
+
+;;; TODO: `fail-handler' and `fail' are exactly the same...
+
 (define (fail-handler)
   ;; (printf "Calling fail-handler\n")
-  (abort-current-continuation
-   (default-continuation-prompt-tag)
-   call-next-choice-point))
+  (abort/default call-next-choice-point))
 
 (define (call-next-choice-point (error-proc default-error-proc))
   ;; (printf "Calling call-next-choice-point\n")
@@ -43,7 +62,7 @@
   (cond (cp
 	 ;; (printf "Found choice point\n")
 	 (let ((prompt-tag (choice-point-prompt-tag cp))
-	       (proc (choice-point-cont cp)))
+	       (proc (thunk (invoke-choice-point cp))))
 	   (call-with-continuation-prompt proc prompt-tag fail-handler)))
 	(else
 	 ;; (printf "call-next-choice-point: no next choice point\n")
@@ -52,9 +71,7 @@
 (define (fail)
   ;; (printf "Called fail\n")
   ;; (printf "Choice points: ~a\n" all-choice-points)
-  (abort-current-continuation
-   (default-continuation-prompt-tag)
-   call-next-choice-point))
+  (abort/default call-next-choice-point))
 
 (define (make-fail-once-proc)
   (define failed? #f)
@@ -69,13 +86,37 @@
 
 (define failed-call-sites (make-hash))
 
+(define (unfail-all-callsites)
+  (set! failed-call-sites (make-hash)))
+;; (define no-such-callsite (gensym))
+
+#||
 (define-syntax fail-once
   (lambda (stx)
     (syntax-case stx ()
       ((_) (let ((id (gensym)))
-	     #`(unless (hash-ref failed-call-sites '#,id #f)
-		 (hash-set! failed-call-sites '#,id #t)
-		 (fail)))))))
+	     #`(when (eq? no-such-callsite
+			    (hash-ref failed-call-sites '#,id no-such-callsite))
+		 (let* ((cp (next-choice-point))
+			(val (call-with-continuation-prompt 
+			      (choice-point-proc cp)
+			      (choice-point-prompt-tag cp)
+			      (lambda (cont)
+				(printf "fail-once: invoking continuation\n")
+				(cont)))))
+		   (hash-set! failed-call-sites '#,id val)
+		   (abort/default (thunk val)))))))))
+||#
+
+(define-syntax fail-once
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_) (let ((id (gensym)))
+	     #`(if (hash-ref failed-call-sites '#,id #f)
+		   'failed-before
+		   (begin
+		     (hash-set! failed-call-sites '#,id #t)
+		     (fail))))))))
 
 ; (fail-once)
 
@@ -85,10 +126,14 @@
    (lambda (comp)
      (let ((new-cps (map (lambda (proc)
 			   (define new-cont
-			     (thunk
+			     (lambda (proc)
 			      ;; (printf "~a: Calling stored cont\n" form)
 			      (comp (proc))))
-			   (choice-point tag new-cont))
+			   (define new-proc
+			     (thunk
+			      ;; (printf "~a: Calling stored proc\n" form)
+			      proc))
+			   (choice-point tag new-proc new-cont))
 			 thunks)))
        (set! all-choice-points
 	     (append new-cps all-choice-points)))
@@ -139,9 +184,7 @@
 		     ;; (printf "Got value ~a\n" value)
 		     (unless (void? value)
 		       (set! result (cons value result)))
-		     (abort-current-continuation
-		      (default-continuation-prompt-tag)
-		      loop))
+		     (abort/default loop))
 		   (reverse result)))
 	     (begin0 (loop)
 	       (set! default-error-proc saved-error-proc)))))))))
@@ -169,6 +212,7 @@
 
 (define (test-11)
   (clear-all-choice-points)
+  (unfail-all-callsites)
   (printf "Value: ~a\n" (amb 1 2 3))
   (printf "Before failing in test-11\n")
   (fail-once)
@@ -176,6 +220,7 @@
 
 (define (test-11a)
   (clear-all-choice-points)
+  (unfail-all-callsites)
   (printf "Value: ~a\n" (amb 1 2 3))
   (printf "Before failing in test-11a\n")
   (fail-once)
@@ -184,6 +229,7 @@
 
 (define (test-12)
   (clear-all-choice-points)
+  (unfail-all-callsites)
   (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
   (fail-once)
   (fail-once)
@@ -272,7 +318,7 @@
 (define-syntax-rule (tests id ...)
   (list (list 'id 
 	      (thunk
-	       (printf "Result: ~a\n"
+	       (printf "Test Result: ~a\n"
 		       (call-with-continuation-prompt
 			id
 			(default-continuation-prompt-tag))))) ...))
