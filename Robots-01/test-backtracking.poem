@@ -115,17 +115,23 @@
       (fail))
     x))
 
-#||
-(define fun (amb + + - * ))
-
 (define (test-16)
-  (fail-once)
-  (printf "+: ~a\n" (fun 1 2 3 4))
-  (fail-once)
-  (printf "-: ~a\n" (fun 1 2 3 4))
-  (fail-once)
-  (printf "*: ~a\n" (fun 1 2 3 4)))
-||#
+  (clear-all-choice-points)
+  (unfail-all-callsites)
+  (define fun (amb + - * (lambda args (exp (apply + args)))))
+  (printf "~a: ~a\n" fun (fun 1 2 3 4))
+  (fail-times 3))
+
+(define (test-16a)
+  (clear-all-choice-points)
+  (bag-of (let ((fun (amb + - * (lambda args (exp (apply + args))))))
+	    (fun 1 2 3 4))))
+
+(define (test-16b-bad)
+  (clear-all-choice-points)
+  (let ((fun (amb + - * (lambda args (exp (apply + args))))))
+    (bag-of (fun 1 2 3 4))))
+
 
 (define-syntax-rule (tests id ...)
   (list (list 'id 
@@ -140,7 +146,9 @@
 	 test-12 
 	 test-13 test-13a test-13b test-13c test-13d
 	 test-13e test-13f test-13g test-13h
-	 test-14 test-14a test-14b))
+	 test-14 test-14a test-14b
+	 test-15
+	 test-16 test-16a))
 
 (define (run-all-tests)
   (for-each (lambda (test)

@@ -6,19 +6,17 @@
 	 set-default-error-proc!
          more-choice-points?
          create-choice-points amb
-         fail fail-once
+         fail fail-once fail-times
          bag-of
          amb-assert
 	 an-integer->= an-integer-<= an-integer-between
 	 a-multiple-of an-element-of)
 
 (defstruct <choice-point> ()
-  prompt-tag
-  proc
   cont)
 
 (define (invoke-choice-point cp)
-  ((choice-point-cont cp) ((choice-point-proc cp))))
+  ((choice-point-cont cp)))
 
 (define all-choice-points '())
 
@@ -42,39 +40,34 @@
         (set! all-choice-points (rest all-choice-points))
         first-cp)))
 
-(define-syntax maybe-abort/cc
-  (syntax-rules ()
-    ((_ tag exp)
-     (if (continuation-prompt-available? tag)
-	 (abort/cc tag exp)
-	 (exp)))))
+(define (abort/default-prompt proc)
+  (abort/cc
+   (default-continuation-prompt-tag)
+   proc))
 
-(define-syntax abort/default
-  (syntax-rules ()
-    ((_ exp)
-     (abort/cc
-      (default-continuation-prompt-tag)
-      exp))))
+(define (maybe-abort/cc tag proc)
+  (if (continuation-prompt-available? tag)
+      (abort/cc tag proc)
+      (proc)))
 
-(define-syntax maybe-abort/default
-  (syntax-rules ()
-    ((_ exp)
-     (maybe-abort/cc (default-continuation-prompt-tag) exp))))
+(define (call/default-prompt proc handler)
+  (call-with-continuation-prompt
+   proc
+   (default-continuation-prompt-tag)
+   handler))
 
 ;;; TODO: `fail-handler' and `fail' are exactly the same...
 
 (define (fail-handler)
   ;; (printf "Calling fail-handler\n")
-  (abort/default call-next-choice-point))
+  (abort/default-prompt call-next-choice-point))
 
 (define (call-next-choice-point (error-proc default-error-proc))
   ;; (printf "Calling call-next-choice-point\n")
   (define cp (next-choice-point error-proc))
   (cond (cp
 	 ;; (printf "Found choice point\n")
-	 (let ((prompt-tag (choice-point-prompt-tag cp))
-	       (proc (thunk (invoke-choice-point cp))))
-	   (call-with-continuation-prompt proc prompt-tag fail-handler)))
+	 (invoke-choice-point cp))
 	(else
 	 ;; (printf "call-next-choice-point: no next choice point\n")
 	 (error-proc))))
@@ -82,42 +75,12 @@
 (define (fail)
   ;; (printf "Called fail\n")
   ;; (printf "Choice points: ~a\n" all-choice-points)
-  (abort/default call-next-choice-point))
-
-(define (make-fail-once-proc)
-  (define failed? #f)
-  (thunk
-   (cond ((failed?)
-	  ;; (printf "fail-once: failed before\n")
-	  (values))
-	 (else
-	  ;; (printf "fail-once: failing for the first time\n")
-	  (set! failed? #t)
-	  (fail)))))
+  (abort/default-prompt call-next-choice-point))
 
 (define failed-call-sites (make-hash))
 
 (define (unfail-all-callsites)
   (set! failed-call-sites (make-hash)))
-;; (define no-such-callsite (gensym))
-
-#||
-(define-syntax fail-once
-  (lambda (stx)
-    (syntax-case stx ()
-      ((_) (let ((id (gensym)))
-	     #`(when (eq? no-such-callsite
-			    (hash-ref failed-call-sites '#,id no-such-callsite))
-		 (let* ((cp (next-choice-point))
-			(val (call-with-continuation-prompt 
-			      (choice-point-proc cp)
-			      (choice-point-prompt-tag cp)
-			      (lambda (cont)
-				(printf "fail-once: invoking continuation\n")
-				(cont)))))
-		   (hash-set! failed-call-sites '#,id val)
-		   (abort/default (thunk val)))))))))
-||#
 
 (define-syntax fail-once
   (lambda (stx)
@@ -129,26 +92,31 @@
 		     (hash-set! failed-call-sites '#,id #t)
 		     (fail))))))))
 
-; (fail-once)
+
+(define-syntax fail-times
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ n) (let ((id (gensym)))
+	       #`(let ((prev (hash-ref failed-call-sites '#,id 0)))
+		   (cond ((< prev n)
+			  (hash-set! failed-call-sites '#,id (add1 prev))
+			  (fail))
+			 (else
+			  'failed-too-often-before))))))))
 
 (define (create-choice-points form . thunks)
-  (define tag (make-continuation-prompt-tag))
   (call-with-composable-continuation
    (lambda (comp)
      (let ((new-cps (map (lambda (proc)
 			   (define new-cont
-			     (lambda (proc)
-			      ;; (printf "~a: Calling stored cont\n" form)
-			      (comp (proc))))
-			   (define new-proc
 			     (thunk
-			      ;; (printf "~a: Calling stored proc\n" form)
-			      proc))
-			   (choice-point tag new-proc new-cont))
+			       ;; (printf "~a: Calling stored cont\n" form)
+			      (comp (proc))))
+			   (choice-point new-cont))
 			 thunks)))
        (set! all-choice-points
 	     (append new-cps all-choice-points)))
-     (call-next-choice-point))))
+     (fail))))
 
 (define-syntax-rule (amb alt ...)
   (create-choice-points '(amb alt ...) (thunk alt) ...))
@@ -157,17 +125,14 @@
   (unless exp
     (fail)))
 
+(define bag-of-prompt-tag (make-continuation-prompt-tag 'bag-of))
+
 (define-syntax-rule (bag-of exp)
   (begin
-    ;; TODO: Maybe parameterize this?
-    (clear-all-choice-points)
     (letrec ((bag-of-handler
 	      (lambda (res)
 		;; (printf "Called bag-of-handler ~a\n" res)
-		(call-with-continuation-prompt
-		 res
-		 (default-continuation-prompt-tag)
-		 bag-of-handler))))
+		(call/default-prompt res bag-of-handler))))
       (let ((saved-error-proc default-error-proc)
 	    (result '()))
 	(call-with-current-continuation
@@ -178,25 +143,25 @@
 	       (set-default-error-proc! saved-error-proc)
 	       ;; (printf "Calling exit\n")
 	       (exit (void))))
-	   (let* ((init-value (call-with-continuation-prompt
-			       (thunk exp)
-			       (default-continuation-prompt-tag)
-			       bag-of-handler)))
+	   (let* ((init-value (call/default-prompt 
+			       (thunk exp) bag-of-handler)))
+	     ;; (printf "Computed init-value ~a\n" init-value)
 	     (unless (void? init-value)
-	       (set! result (list init-value)))
+	       (set! result (cons init-value result)))
 	     (define (loop)
 	       ;; (printf "Starting loop with result = ~a\n" result)
 	       ;; (printf "Number of choice points = ~a\n" (length all-choice-points))
-	       (if (more-choice-points?)
-		   (let ((value (call-with-continuation-prompt
-				 call-next-choice-point
-				 (default-continuation-prompt-tag)
-				 bag-of-handler)))
-		     ;; (printf "Got value ~a\n" value)
-		     (unless (void? value)
-		       (set! result (cons value result)))
-		     (abort/default loop))
-		   (reverse result)))
+	       (cond ((more-choice-points?)
+		      ;; (printf "Calling next choice point\n")
+		      (let ((value (call/default-prompt
+				    call-next-choice-point bag-of-handler)))
+			;; (printf "Got value ~a\n" value)
+			(unless (void? value)
+			  (set! result (cons value result)))
+			(abort/default-prompt loop)))
+		     (else
+		      ;; (printf "Reversing result ~a\n" result)
+		      (reverse result))))
 	     (begin0 (loop)
 	       (set-default-error-proc! saved-error-proc)))))))))
 
@@ -220,3 +185,14 @@
       (fail)
       (amb (car lst) (an-element-of (cdr lst)))))
 
+
+(define (test-14a)
+  (clear-all-choice-points)
+  (bag-of
+   (let ((x (amb 1 2 3 4 5))
+	 (y (amb 2 4 6)))
+     (printf "Trying: ~a\n" (list x y))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))

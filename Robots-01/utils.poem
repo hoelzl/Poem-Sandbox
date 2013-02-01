@@ -1,0 +1,30 @@
+#lang poem
+
+(provide required-argument
+	 required-initarg
+	 contains?
+	 reuse-cons)
+
+(define (required-argument name)
+  (thunk
+   (error (format "The required argument ~a is missing." name))))
+
+(define (required-initarg name)
+  (thunk
+   (error (format "The required initarg ~a is missing." name))))
+
+
+;;; TODO: Add missing data structures to contains?.
+(define (contains? elt tree) 
+  (cond ((null? tree) #f)
+	((eq? elt tree) #t)
+	((pair? tree)
+	 (or (contains? elt (car tree)) (contains? elt (cdr tree))))
+	((vector? tree)
+	 (for/and ((subtree (in-vector tree)))
+	   (contains? elt subtree)))))
+
+(define (reuse-cons hd tl val)
+  (if (and (eq? hd (car val)) (eq? tl (cdr val)))
+      val
+      (cons hd tl)))

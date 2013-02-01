@@ -1,34 +1,177 @@
 #lang poem
 
+(require "utils.poem")
+
+(provide <relation>
+	 name arity functor clauses
+	 clear-all-relations name+arity->functor
+	 remove-relation! find-relation set-find-relation!
+	 <horn-clause>
+	 functor head
+	 <horn-fact>
+	 <horn-rule>
+	 :-
+	 <logic-variable>
+	 name value
+	 make-logic-variable
+	 logic-variable-name?
+	 get-binding binding-val lookup extend-bindings
+	 unify unify-variable
+	 perform-occurs-check? occurs-check?
+	 subst-bindings
+	 apply-unifier)
+
 (defclass <relation> ()
-  name 
-  clauses
-  :autoaccessors :slot
-  :auto #t)
+  (name :initializer (required-initarg :name))
+  (arity :initializer (required-initarg :arity))
+  (functor)
+  (clauses :initvalue '())
+  :printer #t
+  :auto #t
+  :autoaccessors :slot)
+
+(define all-relations (make-hasheq))
+
+(define clear-all-relations (setf! all-relations (make-hasheq)))
+
+(define (name+arity->functor name arity) 
+  (string->symbol (format "~a/~a" name arity)))
+
+(define (remove-relation! name (arity #f))
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-remove! all-relations functor))
+      (hash-remove! all-relations name)))
+
+(define (find-relation name (arity #f))
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-ref all-relations functor #f))
+      (hash-ref all-relations name #f)))
+
+(define (set-find-relation! name arity new-relation)
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-set! all-relations functor new-relation))
+      (hash-set! all-relations name new-relation)))
+
+;;; TODO: Allow specification of functor instead of name and arity.
+(defmethod make ((c (singleton <relation>)) &rest initargs)
+  (let* ((name (getarg initargs :name))
+	 (arity (getarg initargs :arity))
+	 (func (name+arity->functor name arity))
+	 (rel (hash-ref all-relations func #f)))
+    (if rel
+	(let ((new-clauses (getarg initargs :clauses)))
+	  (unless (null? new-clauses)
+	    (setf! (clauses rel) (append (clauses rel) new-clauses)))
+	  rel)
+	(let* ((rel (call-next-method)))
+	  (setf! (functor rel) func)
+	  (hash-set! all-relations func rel)
+	  rel))))
+
+(defclass <horn-clause> ()
+  (functor :initializer (required-initarg :functor))
+  (head :initializer (required-initarg :head))
+  :auto #t
+  :autoaccessors :slot)
+
+(make-equals?-compare-class+slots <horn-clause>)
+
+(defclass <horn-fact> (<horn-clause>))
+
+(defclass <horn-rule> (<horn-clause>)
+  (body :initializer (required-initarg :body))
+  :auto #t
+  :autoaccessors :slot)
+
+(define-syntax :-
+  (syntax-rules ()
+    ((:- (functor arg ...))
+     (make <horn-fact>
+       :functor 'functor :head '(functor arg ...)))
+    ((:- (functor arg ...) exp ...)
+     (make <horn-rule>
+       :functor 'functor :head '(functor arg ...) :body '(exp ...)))))
+
 
 (defclass <logic-variable> ()
   name
   value
-  :autoaccessors :slot)
-
-(define (make-logic-variable (name (gensym)))
-  (make <logic-variable>))
+  :autoaccessors :slot
+  :auto #t)
 
 
-;;; TODO: Add missing data structures to contains.
-(define (contains elt tree) 
-  (cond ((null? tree) #f)
-	((eq? elt tree) #t)
-	((pair? tree)
-	 (or (contains elt (car tree)) (contains elt (cdr tree))))
-	((vector? tree)
-	 (for/and ((subtree (in-vector tree)))
-	   (contains elt subtree)))))
+;;; A simple unification algorithm, following Norvig's implementation
+;;; in PAIP.
 
-(defmethod unify (term1 term2)
-  '())
+(define (logic-variable-name? x)
+  (and (symbol? x)
+       (eq? (string-ref (symbol->string x) 0) #\?)))
 
-(define v1 (make-logic-variable 'v1))
-(define v2 (make-logic-variable 'v2))
-(unify v1 '(p 1 v2))
-; => ((v1 `(p ,v2)))
+(define (get-binding var bindings)
+  (assoc var bindings))
+
+(define (binding-val binding)
+  (cdr binding))
+
+(define (lookup var bindings)
+  (binding-val (get-binding var bindings)))
+
+(define (extend-bindings var val bindings)
+  (cons (cons var val) bindings))
+
+;;; TODO: Extend with other datatypes...
+(define (unify x y (bindings '()))
+  (cond ((not bindings) #f)
+	((eq? x y) bindings)
+	((logic-variable-name? x) (unify-variable x y bindings))
+	((logic-variable-name? y) (unify-variable y x bindings))
+	((and (pair? x) (pair? y))
+	 (unify (rest x) (rest y) (unify (first x) (first y) bindings)))
+	(else #f)))
+
+(define perform-occurs-check? (make-parameter #t))
+
+(define (unify-variable var x bindings)
+  (define (unify-binding binding)
+    (unify (binding-val binding) x bindings))
+  (define (unify-bound-variable binding)
+    (unify var (binding-val binding) bindings))
+  (cond (;; This case is never triggered when called by unify
+	 (eq? var x)
+	 bindings)
+	((get-binding var bindings)
+	 => unify-binding)
+	((and (logic-variable-name? x) (get-binding x bindings))
+	 => unify-bound-variable)
+	((and (perform-occurs-check?) (occurs-check? var x bindings))
+	 #f)
+	(else
+	 (extend-bindings var x bindings))))
+
+(define (occurs-check? var x bindings)
+  (cond ((eq? var x) #t)
+	((and (logic-variable-name? x) (get-binding x bindings))
+	 => (lambda (binding)
+	      (occurs-check? var (binding-val binding) bindings)))
+	((pair? x) (or (occurs-check? var (first x) bindings)
+		       (occurs-check? var (rest x) bindings)))
+	(else #f)))
+
+(define (subst-bindings bindings x)
+  (define (subst-binding binding)
+    (subst-bindings bindings (binding-val binding)))
+  (cond ((not bindings) #f)
+	((null? bindings) x)
+	((and (logic-variable-name? x) (get-binding x bindings))
+	 => subst-binding)
+	((not (pair? x)) x)
+	(else
+	 (reuse-cons (subst-bindings bindings (car x))
+		     (subst-bindings bindings (cdr x))
+		     x))))
+
+(define (apply-unifier x y)
+  (subst-bindings (unify x y) x))

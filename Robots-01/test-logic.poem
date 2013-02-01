@@ -4,4 +4,59 @@
 (require "logic.poem")
 
 (test-begin
- (check-true (contains? 1 '(1 2 3))))
+ (check-true (logic-variable-name? '?x))
+ (check-false (logic-variable-name? 'x)))
+
+(test-begin
+ (check equal? (get-binding '?x '((?x . 1) (?y . 2) (?z . 3))) '(?x . 1))
+ (check equal? (get-binding '?y '((?x . 1) (?y . 2) (?z . 3))) '(?y . 2))
+ (check equal? (get-binding '?z '((?x . 1) (?y . 2) (?z . 3))) '(?z . 3))
+ (check eq? (get-binding '?a '((?x . 1) (?y . 2) (?z . 3))) #f))
+
+(test-begin
+ (check eqv? (binding-val '(?x . y)) 'y))
+
+(test-begin
+ (check equal? (lookup '?x '((?x . 1) (?y . 2) (?z . 3))) 1)
+ (check equal? (lookup '?y '((?x . 1) (?y . 2) (?z . 3))) 2)
+ (check equal? (lookup '?z '((?x . 1) (?y . 2) (?z . 3))) 3))
+
+(test-begin
+ (check equal? (extend-bindings '?x 'y '()) '((?x . y)))
+ (check equal? (extend-bindings '?x 'y '((?a . b)))
+	'((?x . y)  (?a . b))))
+
+(test-begin
+ (check equal? (unify-variable '?x '?x '((?x . ?y))) '((?x . ?y)))
+ (check equal? (unify-variable '?y '?y '((?x . ?y))) '((?x . ?y)))
+ (check equal? (unify-variable '?z '?z '((?x . ?y))) '((?x . ?y)))
+ (check equal? (unify-variable '?x '?z '((?x . ?y))) '((?y . ?z) (?x . ?y)))
+ (check equal? (unify-variable '?x '?y '((?x . ?y))) '((?x . ?y)))
+ (check equal? (unify-variable '?y '?x '((?x . ?y))) '((?x . ?y))))
+
+(test-begin
+ (check equal? (unify '(+ ?x 1) '(+ 2 ?y)) '((?y . 1) (?x . 2)))
+ (check equal? (unify '?x '?y) '((?x . ?y)))
+ (check equal? (unify '(?x ?x) '(?y ?y)) '((?x . ?y)))
+ (check equal? (unify '(?x ?x ?x) '(?y ?y ?y)) '((?x . ?y)))
+ (check equal? (unify '(?x ?y) '(?y ?x)) '((?x . ?y))))
+
+;;; TODO: Tests for occurs check.
+
+(test-begin
+ (check equal? (subst-bindings '((?x . 1)) '?x) 1)
+ (check equal? (subst-bindings '((?x . 1)) '?y) '?y)
+ (check equal? (subst-bindings '((?x . 1)) '(a ?y ?x)) '(a ?y 1))
+ (check eq? (subst-bindings '((?x . 1)) '?z) '?z)
+ (let ((my-list '(a ?y ?z)))
+   (check eq? (subst-bindings '((?x . 1)) my-list) my-list)))
+
+(test-begin
+ (check equal? (apply-unifier '(?x 1) '(f ?y)) '(f 1))
+ (check equal? (apply-unifier '(?x 1) '(?y 1)) '(?y 1))
+ (check-false (apply-unifier '(?x 1) '(?y 2)))
+ (check-false (apply-unifier '(?x 1) '(?y 1 2)))
+ (check-false (apply-unifier '(?x 1 2) '(?y 1)))
+ (check-false (apply-unifier '?x '(f ?x))))
+
+(printf "\nPerformed all tests\n")
