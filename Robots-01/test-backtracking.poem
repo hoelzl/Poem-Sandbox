@@ -132,7 +132,6 @@
   (let ((fun (amb + - * (lambda args (exp (apply + args))))))
     (bag-of (fun 1 2 3 4))))
 
-
 (define-syntax-rule (tests id ...)
   (list (list 'id 
 	      (thunk

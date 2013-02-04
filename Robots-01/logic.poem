@@ -90,10 +90,11 @@
   (syntax-rules ()
     ((:- (functor arg ...))
      (make <horn-fact>
-       :functor 'functor :head '(functor arg ...)))
+       :name 'functor :arity (length '(arg ...)) :head '(functor arg ...)))
     ((:- (functor arg ...) exp ...)
      (make <horn-rule>
-       :functor 'functor :head '(functor arg ...) :body '(exp ...)))))
+       :name 'functor :arity (length '(arg ...)) :head '(functor arg ...)
+       :body '(exp ...)))))
 
 
 (defclass <logic-variable> ()
@@ -151,6 +152,7 @@
 	(else
 	 (extend-bindings var x bindings))))
 
+;;; TODO: other data structures
 (define (occurs-check? var x bindings)
   (cond ((eq? var x) #t)
 	((and (logic-variable-name? x) (get-binding x bindings))
