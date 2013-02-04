@@ -211,6 +211,8 @@
 	(first conts))))
 (define (add-cont! k)
   (amb-conts (list* k (amb-conts))))
+(define (add-conts! ks)
+  (amb-conts (append ks (amb-conts))))
 
 (define-syntax amb
   (syntax-rules ()
@@ -219,14 +221,32 @@
       (lambda (cont)
 	(with-output
 	 (format "In amb for ~a" (list 'value ...))
-	 (add-cont! (lambda ()
-		      (with-output
-		       (format "Calling continuation for ~v" 'value)
-		       (cont value)))) ...
+	 (add-conts! 
+	  (list (lambda ()
+		  (with-output
+		   (let ((val 'value))
+		     ;; We introduce `val' to avoid lossage of ~v
+		     ;; when `value' is an expression returning
+		     ;; multiple values
+		     (format "Calling continuation for ~v" val))
+		   (cont value))) ...))
 	 (fail)))
       amb-tag))))
 
-(define no-more-values '#:no-more-values)
+(define (deliver value)
+  (with-output
+   (format "Delivering ~a" value)
+   (call-with-composable-continuation
+    (lambda (cont)
+      (add-cont! (lambda ()
+		   (with-output
+		    (format "Resuming (deliver ~a)" value)
+		    (abort/cc amb-tag 'result (cont 'command-continuation)))))
+      (with-output
+       (format "Deliver: abortind with value ~a" value)
+       (abort/cc amb-tag 'result value)))
+    amb-tag)
+   (void)))
 
 (define (fail)
   (define cc (next-cont!))
@@ -235,35 +255,65 @@
    (if cc
        (with-output
 	"Fail: aborting"
-	(abort/cc amb-tag (with-output "Called (cc)" (cc))))
-       no-more-values)))
+	(abort/cc amb-tag 'result (with-output "Called (cc)" (cc))))
+       (abort/cc amb-tag 'failure #f))))
 
 (define-syntax collect
   (syntax-rules ()
     ((_ body ...)
      (let ((result '()))
-       (define (amb-handler value)
+       (define (amb-handler kind value)
 	 (with-output
-	  (format "Calling handler for ~a" value)
-	  (if (eq? value no-more-values)
-	      (with-output
-	       (format "Got value ~a, result ~a" value result)
-	       result)
-	      (with-output
-	       (format "Got value ~a, result ~a. Continuing" value result)
-	       (set! result (list* value result))
-	       (call-with-continuation-prompt 
-		fail amb-tag amb-handler)
-	       result))))
+	  (format "Calling handler for <~a, ~a>" kind value)
+	  (case kind
+	    ((failure)
+	     (with-output "Failed" (reverse result)))
+	    ((result)
+	     (with-output
+	      (format "Got value ~a, result ~a. Continuing" value result)
+	      (unless (eq? value (void))
+		(set! result (list* value result)))
+	      (call-with-continuation-prompt 
+	       fail amb-tag amb-handler)
+	      (reverse result))))))
        (with-output
 	"In collect"
 	(parameterize ((amb-conts '()))
 	  (call-with-continuation-prompt
 	   (thunk body ...) amb-tag amb-handler)))))))
 
+(define (amb-test-01)
+  (init!)
+  #;(collect (amb 1 2 3))
+  (printf "Got ~a\n" (collect (amb 1 2 3))))
+
+(define (amb-test-02)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect (amb 1 (collect (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))))
+
+(define (amb-test-03)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect (amb 1
+			(collect (amb 'foo (fail) 'baz))
+			2
+			(fail)
+			(amb 'a 'b 'c)
+			3))))
+
+(define (amb-test-04)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))))
+
+
+(define all-amb-tests
+  (tests amb-test-01 amb-test-02 amb-test-03 amb-test-04))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (run-all-comp-tests [n 1])
+(define (run-all-tests [n 0])
   (for-each (lambda (test)
 	      (printf "Running ~a:\n" (car test))
 	      (call-with-continuation-prompt
@@ -271,5 +321,6 @@
 	      (printf "Done\n\n"))
 	    (case n
 	      ((1) all-comp-tests-1)
-	      ((2) all-comp-tests-2))))
+	      ((2) all-comp-tests-2)
+	      ((0 amb) all-amb-tests))))
 
