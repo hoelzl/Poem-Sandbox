@@ -307,6 +307,13 @@
   (printf "Got ~a\n"
 	  (collect (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))))
 
+(define (amb-test-05)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
 
 (define all-amb-tests
   (tests amb-test-01 amb-test-02 amb-test-03 amb-test-04))
