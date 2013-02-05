@@ -100,26 +100,82 @@
 
 (define (test-14a)
   (collect ()
-   (let ((x (amb 1 2 3 4 5 6 7 8 9 10))
-	 (y (amb 2 3 4 5)))
-     (test-printf "Trying: ~a\n" (list x y))
+   (let ((x (an-integer-between 1 10))
+	 (y (an-integer-between 1 10)))
      (if (and (even? x) (even? y)
 	      (>= (+ x y) 7))
 	 (list x y)
 	 (fail)))))
 
+(run-amb-test test-14a '((2 6) (2 8) (2 10)
+			 (4 4) (4 6) (4 8) (4 10)
+			 (6 2) (6 4) (6 6) (6 8) (6 10)
+			 (8 2) (8 4) (8 6) (8 8) (8 10)
+			 (10 2) (10 4) (10 6) (10 8) (10 10)))
+
+
+(define (test-14b)
+  (collect ()
+   (let ((x (an-integer-between* 1 10))
+	 (y (an-integer-between* 1 10)))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))
+
+
+(run-amb-test test-14b '((2 6) (2 8) (2 10)
+			 (4 4) (4 6) (4 8) (4 10)
+			 (6 2) (6 4) (6 6) (6 8) (6 10)
+			 (8 2) (8 4) (8 6) (8 8) (8 10)
+			 (10 2) (10 4) (10 6) (10 8) (10 10)))
+
 (define (gen-numbers)
-  (let ((x (amb 1 2 3 4 5))
-	(y (amb 2 4 6)))
+  (let ((x (an-integer-between 1 6))
+	(y (an-integer-between 1 6)))
     (test-printf "Trying: ~a\n" (list x y))
     (if (and (even? x) (even? y)
 	     (>= (+ x y) 7))
 	(list x y)
 	(fail))))
 
-(define (test-14b)
+(define (test-14c)
   (collect ()
    (gen-numbers)))
+
+(run-amb-test test-14c '((2 6) (4 4) (4 6) (6 2) (6 4) (6 6)))
+
+;;; The next two tests take rather long to run and are meant for
+;;; interactive testing.
+
+(define (test-14d)
+  (collect ()
+   (let ((x (an-integer-between 1 50))
+	 (y (an-integer-between 1 50)))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))
+
+(define (test-14e)
+  (collect ()
+   (let ((x (an-integer-between* 1 100))
+	 (y (an-integer-between* 1 100)))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))
+
+
+(define (test-14f)
+  (collect ((make <ids>))
+   (let ((x (an-integer-between* 1 100))
+	 (y (an-integer-between* 1 100)))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (list x y)
+	 (fail)))))
+
 
 (define (test-15)
   (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
@@ -127,6 +183,8 @@
      (when (< x 10)
        (fail))
      x)))
+
+(run-amb-test test-15 '(10))
 
 (define (test-15a)
   (collect ((make <dfs> :result-strategy (make <n-results-strategy>
@@ -136,21 +194,28 @@
        (fail))
      x)))
 
+(run-amb-test test-15a '(10 11 12 13 14))
+
 (define (test-16)
   (collect
    ()
-   (define my-fun (lambda args (exp (apply + args))))
+   (define my-fun (lambda args (* (apply + args) (apply * args))))
    (define fun (amb + - * my-fun))
    (list (object-name fun) (fun 1 2 3 4))))
 
+(run-amb-test test-16 '((+ 10) (- -8) (* 24) (my-fun 240)))
 
 ;;; New tests
 
 (define (test-21)
   (collect () (amb 1 2 3)))
 
+(run-amb-test test-21 '(1 2 3))
+
 (define (test-22)
   (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3)))
+
+(run-amb-test test-22 '(1 (foo bar baz) 2 a b c 3))
 
 (define (test-23)
   (collect () (amb 1
@@ -160,9 +225,13 @@
 		   (amb 'a 'b 'c)
 		   3)))
 
+(run-amb-test test-23 '(1 (foo baz) 2 a b c 3))
+
 (define (test-24)
   (collect ()
 	   (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3)))
+
+(run-amb-test test-24 '(1 a 4 5 6 2 b 3))
 
 (define (test-25)
   (collect ()
@@ -170,23 +239,34 @@
 	   (deliver (amb 1 2 3))
 	   (amb 'foo 'bar)))
 
+(run-amb-test test-25 '(a 1 foo bar 2 foo bar 3 foo bar))
+
+
 (define (test-25a)
   (collect ((make <bfs>))
 	   (deliver 'a)
 	   (deliver (amb 1 2 3))
 	   (amb 'foo 'bar)))
 
+(run-amb-test test-25a '(a 1 2 3 foo bar foo bar foo bar))
+
+
 (define (test-25b)
   (collect ((make <ids>))
 	   (deliver 'a)
 	   (deliver (amb 1 2 3))
 	   (amb 'foo 'bar)))
+ 
+(run-amb-test test-25b '(a 1 2 3 foo bar foo bar foo bar))
+
 
 (define (test-25c)
   (collect ()
 	   (deliver 'a)
 	   (deliver (amb 1 (amb 2 3) 4))
 	   (amb 'foo 'bar)))
+ 
+(run-amb-test test-25c '(a 1 foo bar 2 foo bar 3 foo bar 4 foo bar))
 
 (define (test-25d)
   (collect ((make <ids>))
@@ -194,17 +274,24 @@
 	   (deliver (amb 1 (amb 2 3) 4))
 	   (amb 'foo 'bar)))
 
+(run-amb-test test-25d '(a 1 4 foo bar 2 3 foo bar foo bar foo bar))
+
 (define (test-25e)
   (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
 	   (deliver 'a)
 	   (deliver (amb 1 (amb 2 3) 4))
 	   (amb 'foo 'bar)))
 
+(run-amb-test test-25e '(a))
+
 (define (test-25f)
   (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
 	   (deliver 'a)
 	   (deliver (amb 1 (amb 2 3) 4))
 	   (amb 'foo 'bar)))
+
+(run-amb-test test-25f '(1 4 2 3))
+
 
 (define (nd)
   (display "(1) ")

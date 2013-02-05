@@ -26,10 +26,17 @@
 	 collect
 	 amb deliver fail
 
-	 an-integer->= an-integer-<= an-integer-between
+	 an-integer->= an-integer-<= 
+	 an-integer-between an-integer-between*
 	 a-multiple-of an-element-of)
 
 (require racket/control)
+
+(define debugging? #f)
+(define (debug-printf . args)
+  (when debugging?
+    (apply printf args)))
+
 
 ;;; Search strategies
 
@@ -41,7 +48,7 @@
 ;; * Should the computation continue?
 ;; * The real value for the computation, for strategies that have to
 ;;   wrap nodes.
-(defgeneric collect-result (strategy node direct?))
+(defgeneric collect-result (strategy node))
 (defgeneric record-failure (strategy))
 (defmethod record-failure (strategy)
   ;; Do nothing.
@@ -49,12 +56,12 @@
 
 (defclass <all-results-strategy> (<result-strategy>))
 
-(defmethod collect-result ((strategy <all-results-strategy>) node direct?)
+(defmethod collect-result ((strategy <all-results-strategy>) node)
   (values (not (eq? node (void))) #t node))
 
 (defclass <one-result-strategy> (<result-strategy>))
 
-(defmethod collect-result ((strategy <one-result-strategy>) node direct?)
+(defmethod collect-result ((strategy <one-result-strategy>) node)
   (values #t #f node))
 
 (defclass <n-results-strategy> (<result-strategy>)
@@ -63,17 +70,17 @@
   :auto #t
   :autoaccessors :slot)
 
-(defmethod collect-result ((strategy <n-results-strategy>) node direct?)
+(defmethod collect-result ((strategy <n-results-strategy>) node)
   (inc! (number-of-results-so-far strategy))
   (define continue?
-    (<= (number-of-results-so-far strategy) (number-of-results strategy)))
+    (< (number-of-results-so-far strategy) (number-of-results strategy)))
   (values #t
 	  continue?
 	  node))
 
 (defclass <numeric-results-strategy> (<result-strategy>))
 
-(defmethod collect-result ((strategy <numeric-results-strategy>) node direct?)
+(defmethod collect-result ((strategy <numeric-results-strategy>) node)
   (values (number? node) #t node))
 
 (defclass <search-strategy> ()
@@ -85,8 +92,8 @@
 (defgeneric add-node! ((strategy <search-strategy>) node))
 (defgeneric add-nodes! ((strategy <search-strategy>) nodes))
 
-(defmethod collect-result ((strategy <search-strategy>) node direct?)
-  (collect-result (result-strategy strategy) node direct?))
+(defmethod collect-result ((strategy <search-strategy>) node)
+  (collect-result (result-strategy strategy) node))
 
 (defclass <list-search-strategy> (<search-strategy>)
   (nodes :initvalue '())
@@ -144,9 +151,11 @@
   :auto #t
   :autoaccessors :slot)
 
-(defmethod collect-result ((strategy <ids>) result direct?)
-  (if (or (and (not direct?) (= (max-depth strategy) (curr-depth strategy)))
-	  (and direct? (= (max-depth strategy) (add1 (curr-depth strategy)))))
+(defmethod collect-result ((strategy <ids>) result)
+  (debug-printf "collect-result: ~a\n" result)
+  (debug-printf "max-depth: ~a, curr-depth: ~a\n" 
+		(max-depth strategy) (curr-depth strategy))
+  (if (= (max-depth strategy) (curr-depth strategy))
       (call-next-method)
       (values #f #t #f)))
 
@@ -208,62 +217,93 @@
 ;;; Amb and friends
 
 (define amb-tag (make-continuation-prompt-tag 'amb))
+(define amb-abort-tag (make-continuation-prompt-tag 'amb-abort))
 (define amb-search-strategy (make-parameter #f))
 
 (define-syntax amb
   (syntax-rules ()
     ((_ value ...)
-     (call-with-composable-continuation
+     (call-with-current-continuation
       (lambda (cont)
+	(debug-printf "amb: adding nodes\n")
 	(add-nodes!
 	 (amb-search-strategy)
 	 (list (lambda ()
-		 (cont value)) ...))
+		 (debug-printf "Calling cont\n")
+		 (cont value)
+		 (debug-printf "Should never get here\n")) ...))
+	(debug-printf "amb: failing: strategy ~a\n" (amb-search-strategy))
 	(fail))
       amb-tag))))
 
 (define (deliver value)
-  (call-with-composable-continuation
+  (debug-printf "Delivering ~a\n" value)
+  (call-with-current-continuation
    (lambda (cont)
      (define strategy (amb-search-strategy))
      (add-node!
       strategy
       (lambda ()
-	(abort/cc amb-tag 'result (cont 'command-continuation))))
-     (abort/cc amb-tag 'direct-result value))
+	(debug-printf "Continuing after delivering a value\n")
+	(cont 'command-continuation)))
+     (add-node!
+      strategy
+      (thunk
+       (debug-printf "Delivering value ~a\n" value)
+       (abort/cc amb-tag 'deliver value)))
+     (fail))
    amb-tag)
   (void))
 
 (define (fail)
+  (debug-printf "Failing\n")
   (define strategy (amb-search-strategy))
   (define cc (next-node! strategy))
   (record-failure strategy)
   (if cc
-      (abort/cc amb-tag 'result (cc))
-      (abort/cc amb-tag 'failure #f)))
+      (abort/cc amb-tag 'cont cc)
+      (abort/cc amb-abort-tag)))
 
 (define-syntax collect
   (syntax-rules ()
     ((_ (search-strategy) body ...)
      (let ((result '()))
+       (define (process-result res)
+	 (let-values (((collect-it? continue? real-value)
+		       (collect-result (amb-search-strategy) res)))
+	   (debug-printf "Result ~a, collect-it? ~a\n"
+			 res collect-it?)
+	   (when collect-it?
+	     (debug-printf "Collecting result ~a\n" res)
+	     (set! result (list* res result)))
+	   (cond (continue?
+		  (debug-printf "Continuing\n")
+		  (call-with-continuation-prompt 
+		   fail amb-tag amb-handler))
+		 (else
+		  (abort/cc amb-abort-tag)))))
        (define (amb-handler kind value)
 	 (case kind
 	   ((failure)
-	    (reverse result))
-	   ((result direct-result)
-	    (let-values (((collect-it? continue? real-value)
-			  (collect-result (amb-search-strategy)
-					  value
-					  (eq? kind 'direct-result))))
-	      (when collect-it?
-		(set! result (list* value result)))
-	      (when continue?
-		(call-with-continuation-prompt 
-		 fail amb-tag amb-handler)))
-	    (reverse result))))
+	    ;; TODO: delete this case
+	    (debug-printf "In collect/failure: ~a\n" value))
+	   ((cont)
+	    (debug-printf "In collect/cont 1: ~a\n" value)
+	    (let ((res (call-with-continuation-prompt 
+			value amb-tag amb-handler)))
+	      (process-result res)))
+	   ((deliver)
+	    (debug-printf "In collect/deliver: ~a\n" value)
+	    (process-result value))
+	   (else (error "Fell through amb-handler."))))
        (parameterize ((amb-search-strategy search-strategy))
 	 (call-with-continuation-prompt
-	  (thunk body ...) amb-tag amb-handler))))
+	  (thunk
+	   (call-with-continuation-prompt
+	    (thunk body ...) amb-tag amb-handler))
+	  amb-abort-tag
+	  (thunk (reverse result)))
+	 (reverse result))))
     ((_ () body ...)
      (collect ((make <dfs>)) body ...))))
 
@@ -279,6 +319,18 @@
       (fail)
       (amb m (an-integer-between (+ m 1) n))))
 
+(define-for-syntax (make-integer-list m n)
+  (if (m . > . n)
+      '()
+      (cons m (make-integer-list (add1 m) n))))
+
+(define-syntax (an-integer-between* stx)
+  (syntax-case stx ()
+    ((_ m n)
+     #`(amb #,@(make-integer-list (syntax->datum #'m) (syntax->datum #'n))))))
+
+;; (an-integer-between* 1 10)
+
 (define (a-multiple-of k)
   (let ((multiplier (an-integer->= 1)))
     (* multiplier k)))
@@ -289,6 +341,15 @@
       (amb (car lst) (an-element-of (cdr lst)))))
 
 
+(define (test-15)
+  (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
+   (let ((x (an-integer->= 1)))
+     (when (< x 2)
+       (fail))
+     x)))
 
-
-
+(define (test-25b)
+  (collect ((make <ids>))
+	   (deliver 'a)
+	   (deliver (amb 1 2 3))
+	   (amb 'foo 'bar)))
