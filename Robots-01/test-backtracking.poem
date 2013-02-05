@@ -108,6 +108,76 @@
    (define fun (amb + - * my-fun))
    (list (object-name fun) (fun 1 2 3 4))))
 
+
+;;; New tests
+
+(define (test-21)
+  (collect () (amb 1 2 3)))
+
+(define (test-22)
+  (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3)))
+
+(define (test-23)
+  (collect () (amb 1
+		   (collect () (amb 'foo (fail) 'baz))
+		   2
+		   (fail)
+		   (amb 'a 'b 'c)
+		   3)))
+
+(define (test-24)
+  (collect ()
+	   (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3)))
+
+(define (test-25)
+  (collect ()
+	   (deliver 'a)
+	   (deliver (amb 1 2 3))
+	   (amb 'foo 'bar)))
+
+(define (test-25a)
+  (collect ((make <bfs>))
+	   (deliver 'a)
+	   (deliver (amb 1 2 3))
+	   (amb 'foo 'bar)))
+
+(define (test-25b)
+  (collect ((make <ids>))
+	   (deliver 'a)
+	   (deliver (amb 1 2 3))
+	   (amb 'foo 'bar)))
+
+(define (test-25c)
+  (collect ()
+	   (deliver 'a)
+	   (deliver (amb 1 (amb 2 3) 4))
+	   (amb 'foo 'bar)))
+
+(define (test-25d)
+  (collect ((make <ids>))
+	   (deliver 'a)
+	   (deliver (amb 1 (amb 2 3) 4))
+	   (amb 'foo 'bar)))
+
+(define (test-25e)
+  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	   (deliver 'a)
+	   (deliver (amb 1 (amb 2 3) 4))
+	   (amb 'foo 'bar)))
+
+(define (test-25f)
+  (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
+	   (deliver 'a)
+	   (deliver (amb 1 (amb 2 3) 4))
+	   (amb 'foo 'bar)))
+
+(define (test-26)
+  (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+(define (test-26a)
+  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
 (define-syntax-rule (tests id ...)
   (list (list 'id 
 	      (thunk
@@ -123,7 +193,14 @@
 	 test-13e test-13f test-13g test-13h
 	 test-14 test-14a test-14b
 	 test-15
-	 test-16))
+	 test-16
+
+	 test-21
+	 test-22
+	 test-23
+	 test-24
+	 test-25 test-25a test-25b test-25c test-25d test-25e test-25f
+	 test-26 test-26a))
 
 (define (run-all-tests)
   (for-each (lambda (test)
