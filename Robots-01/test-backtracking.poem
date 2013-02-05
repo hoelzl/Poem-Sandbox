@@ -171,6 +171,26 @@
 	   (deliver (amb 1 (amb 2 3) 4))
 	   (amb 'foo 'bar)))
 
+(define (nd)
+  (display "(1) ")
+  (deliver 'a)
+  (display "(2) ")
+  (deliver (amb 1 (amb 2 3) 4))
+  (display "(3) ")
+  (amb 'foo 'bar))
+
+(define (test-25g)
+  (collect () (nd)))
+
+(define (test-25h)
+  (collect ((make <dfs>)) (nd)))
+
+(define (test-25i)
+  (collect ((make <bfs>)) (nd)))
+
+(define (test-25j)
+  (collect ((make <ids>)) (nd)))
+
 (define (test-26)
   (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
 
