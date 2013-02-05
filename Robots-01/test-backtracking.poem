@@ -1,30 +1,52 @@
 #lang poem
 
 (require "backtracking.poem")
+(require (rename-in rackunit (fail fail-test)))
 
+(define in-automated-test (make-parameter #f))
+(define (test-printf . args)
+  (unless (in-automated-test)
+    (apply printf args)))
+
+(define-syntax run-amb-test
+  (syntax-rules ()
+    ((_ fun res)
+     (parameterize ((in-automated-test #t))
+       (test-begin
+	(check equal? (fun) res))))))
 
 (define (test-11)
   (collect 
    ()
-   (printf "Value: ~a\n" (amb 1 2 3))
-   (printf "Before failing in test-11\n")
+   (test-printf "Value: ~a\n" (amb 1 2 3))
+   (test-printf "Before failing in test-11\n")
    (fail)
-   (printf "After failing in test-11\n")))
+   (test-printf "After failing in test-11\n")))
+
+(run-amb-test test-11 '())
 
 (define (test-12)
   (collect ()
-	   (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
+	   (test-printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
 	   (fail)))
+
+(run-amb-test test-12 '())
 
 (define (test-13)
   (collect () (amb 1 2 (amb 'a 'b 'c) 3)))
 
+(run-amb-test test-13 '(1 2 a b c 3))
+
 (define (test-13a)
   (collect () (an-integer-between 3 6)))
+
+(run-amb-test test-13a '(3 4 5 6))
 
 (define (test-13b)
   (collect () (let ((x (an-integer-between 3 6)))
 		 x)))
+
+(run-amb-test test-13b '(3 4 5 6))
 
 (define (test-13c)
   (collect () (let ((x (an-integer-between 3 6)))
@@ -32,17 +54,27 @@
 		     x
 		     (fail)))))
 
+(run-amb-test test-13c '(4 6))
+
 (define (test-13d)
   (collect () (amb 1 (fail) 2)))
+
+(run-amb-test test-13d '(1 2))
 
 (define (test-13e)
   (collect () (amb (fail) 1 2)))
 
+(run-amb-test test-13e '(1 2))
+
 (define (test-13f)
   (collect () (amb 1 (fail) 2 3 4)))
 
+(run-amb-test test-13f '(1 2 3 4))
+
 (define (test-13g)
   (collect () (amb 1 (fail) 2 3 4 (fail))))
+
+(run-amb-test test-13g '(1 2 3 4))
 
 (define (test-13h)
   (collect () (let ((x (amb 3 4 5 6)))
@@ -50,24 +82,27 @@
 		     x
 		     (fail)))))
 
-(define (test-14)
-  (collect
-   ()
-   (let ((x (amb 1 2 3 4 5))
-	 (y (amb 2 4 6)))
-     (printf "Trying: ~a\n" (list x y))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (begin
-	   (printf "Result: ~a\n" (list x y))
-	   (list x y))
-	 (fail)))))
+(run-amb-test test-13h '(4 6))
 
-(define (test-14a)
+(define (test-14)
   (collect ()
    (let ((x (amb 1 2 3 4 5))
 	 (y (amb 2 4 6)))
-     (printf "Trying: ~a\n" (list x y))
+     (test-printf "Trying: ~a\n" (list x y))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (begin
+	   (test-printf "Result: ~a\n" (list x y))
+	   (list x y))
+	 (fail)))))
+
+(run-amb-test test-14 '((2 6) (4 4) (4 6)))
+
+(define (test-14a)
+  (collect ()
+   (let ((x (amb 1 2 3 4 5 6 7 8 9 10))
+	 (y (amb 2 3 4 5)))
+     (test-printf "Trying: ~a\n" (list x y))
      (if (and (even? x) (even? y)
 	      (>= (+ x y) 7))
 	 (list x y)
@@ -76,7 +111,7 @@
 (define (gen-numbers)
   (let ((x (amb 1 2 3 4 5))
 	(y (amb 2 4 6)))
-    (printf "Trying: ~a\n" (list x y))
+    (test-printf "Trying: ~a\n" (list x y))
     (if (and (even? x) (even? y)
 	     (>= (+ x y) 7))
 	(list x y)
@@ -201,7 +236,7 @@
 (define-syntax-rule (tests id ...)
   (list (list 'id 
 	      (thunk
-	       (printf "Test Result: ~a\n"
+	       (test-printf "Test Result: ~a\n"
 		       (call-with-continuation-prompt
 			id
 			(default-continuation-prompt-tag))))) ...))
@@ -224,6 +259,8 @@
 
 (define (run-all-tests)
   (for-each (lambda (test)
-	      (printf "\n\nCalling test ~a\n" (first test))
+	      (test-printf "\n\nCalling test ~a\n" (first test))
 	      ((second test)))
 	    all-tests))
+
+'performed-all-tests
