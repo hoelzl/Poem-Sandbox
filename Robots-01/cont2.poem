@@ -243,7 +243,7 @@
 		    (format "Resuming (deliver ~a)" value)
 		    (abort/cc amb-tag 'result (cont 'command-continuation)))))
       (with-output
-       (format "Deliver: abortind with value ~a" value)
+       (format "Deliver: aborting with value ~a" value)
        (abort/cc amb-tag 'result value)))
     amb-tag)
    (void)))
