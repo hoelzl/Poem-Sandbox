@@ -4,88 +4,67 @@
 
 
 (define (test-11)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Value: ~a\n" (amb 1 2 3))
-  (printf "Before failing in test-11\n")
-  (fail-once)
-  (printf "After failing in test-11\n"))
-
-(define (test-11a)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Value: ~a\n" (amb 1 2 3))
-  (printf "Before failing in test-11a\n")
-  (fail-once)
-  (fail-once)
-  (printf "After failing in test-11a\n"))
+  (collect 
+   ()
+   (printf "Value: ~a\n" (amb 1 2 3))
+   (printf "Before failing in test-11\n")
+   (fail)
+   (printf "After failing in test-11\n")))
 
 (define (test-12)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
-  (fail-once)
-  (fail-once)
-  (fail-once)
-  (fail-once)
-  (fail-once))
+  (collect ()
+	   (printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
+	   (fail)))
 
 (define (test-13)
-  (clear-all-choice-points)
-  (bag-of (amb 1 2 (amb 'a 'b 'c) 3)))
+  (collect () (amb 1 2 (amb 'a 'b 'c) 3)))
 
 (define (test-13a)
-  (clear-all-choice-points)
-  (bag-of (an-integer-between 3 6)))
+  (collect () (an-integer-between 3 6)))
 
 (define (test-13b)
-  (clear-all-choice-points)
-  (bag-of (let ((x (an-integer-between 3 6)))
+  (collect () (let ((x (an-integer-between 3 6)))
 		 x)))
 
 (define (test-13c)
-  (clear-all-choice-points)
-  (bag-of (let ((x (an-integer-between 3 6)))
+  (collect () (let ((x (an-integer-between 3 6)))
 		 (if (even? x)
 		     x
 		     (fail)))))
 
 (define (test-13d)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2)))
+  (collect () (amb 1 (fail) 2)))
 
 (define (test-13e)
-  (clear-all-choice-points)
-  (bag-of (amb (fail) 1 2)))
+  (collect () (amb (fail) 1 2)))
 
 (define (test-13f)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2 3 4)))
+  (collect () (amb 1 (fail) 2 3 4)))
 
 (define (test-13g)
-  (clear-all-choice-points)
-  (bag-of (amb 1 (fail) 2 3 4 (fail))))
+  (collect () (amb 1 (fail) 2 3 4 (fail))))
 
 (define (test-13h)
-  (clear-all-choice-points)
-  (bag-of (let ((x (amb 3 4 5 6)))
+  (collect () (let ((x (amb 3 4 5 6)))
 		 (if (even? x)
 		     x
 		     (fail)))))
 
 (define (test-14)
-  (clear-all-choice-points)
-  (let ((x (amb 1 2 3 4 5))
-	(y (amb 2 4 6)))
-    (printf "Trying: ~a\n" (list x y))
-    (if (and (even? x) (even? y)
-	     (>= (+ x y) 7))
-	(printf "Result: ~a\n" (list x y))
-	(fail))))
+  (collect
+   ()
+   (let ((x (amb 1 2 3 4 5))
+	 (y (amb 2 4 6)))
+     (printf "Trying: ~a\n" (list x y))
+     (if (and (even? x) (even? y)
+	      (>= (+ x y) 7))
+	 (begin
+	   (printf "Result: ~a\n" (list x y))
+	   (list x y))
+	 (fail)))))
 
 (define (test-14a)
-  (clear-all-choice-points)
-  (bag-of
+  (collect ()
    (let ((x (amb 1 2 3 4 5))
 	 (y (amb 2 4 6)))
      (printf "Trying: ~a\n" (list x y))
@@ -104,33 +83,30 @@
 	(fail))))
 
 (define (test-14b)
-  (clear-all-choice-points)
-  (bag-of
+  (collect ()
    (gen-numbers)))
 
 (define (test-15)
-  (clear-all-choice-points)
-  (let ((x (an-integer->= 1)))
-    (when (< x 10)
-      (fail))
-    x))
+  (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
+   (let ((x (an-integer->= 1)))
+     (when (< x 10)
+       (fail))
+     x)))
+
+(define (test-15a)
+  (collect ((make <dfs> :result-strategy (make <n-results-strategy>
+					   :number-of-results 5)))
+   (let ((x (an-integer->= 1)))
+     (when (< x 10)
+       (fail))
+     x)))
 
 (define (test-16)
-  (clear-all-choice-points)
-  (unfail-all-callsites)
-  (define fun (amb + - * (lambda args (exp (apply + args)))))
-  (printf "~a: ~a\n" fun (fun 1 2 3 4))
-  (fail-times 3))
-
-(define (test-16a)
-  (clear-all-choice-points)
-  (bag-of (let ((fun (amb + - * (lambda args (exp (apply + args))))))
-	    (fun 1 2 3 4))))
-
-(define (test-16b-bad)
-  (clear-all-choice-points)
-  (let ((fun (amb + - * (lambda args (exp (apply + args))))))
-    (bag-of (fun 1 2 3 4))))
+  (collect
+   ()
+   (define my-fun (lambda args (exp (apply + args))))
+   (define fun (amb + - * my-fun))
+   (list (object-name fun) (fun 1 2 3 4))))
 
 (define-syntax-rule (tests id ...)
   (list (list 'id 
@@ -141,13 +117,13 @@
 			(default-continuation-prompt-tag))))) ...))
 
 (define all-tests
-  (tests test-11 test-11a
+  (tests test-11
 	 test-12 
 	 test-13 test-13a test-13b test-13c test-13d
 	 test-13e test-13f test-13g test-13h
 	 test-14 test-14a test-14b
 	 test-15
-	 test-16 test-16a))
+	 test-16))
 
 (define (run-all-tests)
   (for-each (lambda (test)

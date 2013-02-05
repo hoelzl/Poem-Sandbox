@@ -1,169 +1,272 @@
 #lang poem
 
-(require racket/control)
-(provide clear-all-choice-points
-	 unfail-all-callsites
-	 set-default-error-proc!
-         more-choice-points?
-         create-choice-points amb
-         fail fail-once fail-times
-         bag-of
-         amb-assert
+(provide <result-strategy>
+	 collect-result
+	 <all-results-strategy> <one-result-strategy>
+	 <n-results-strategy>
+	 number-of-results number-of-results-so-far
+	 <numeric-results-strategy>
+	 
+	 <search-strategy>
+	 next-node! add-node! add-nodes!
+	 <list-search-strategy> <dfs> <bfs>
+	 <ids-node> 
+	 ids-node-depth set-ids-node-depth!
+	 ids-node-value set-ids-node-value!
+
+	 <ids>
+	 ;;; Not sure whether these should be exported here
+	 ;;; Maybe put them into a submodule for testing?
+	 nodes set-nodes!
+	 initial-nodes set-initial-nodes!
+	 max-depth set-max-depth!
+	 curr-depth set-curr-depth!
+	 need-deepening? set-need-deepening?!
+
+	 collect
+	 amb deliver fail
+
 	 an-integer->= an-integer-<= an-integer-between
 	 a-multiple-of an-element-of)
 
-(defstruct <choice-point> ()
-  cont)
+(require racket/control)
 
-(define (invoke-choice-point cp)
-  ((choice-point-cont cp)))
+;;; Search strategies
 
-(define all-choice-points '())
+(defclass <result-strategy> ())
 
-(define (clear-all-choice-points)
-  (set! all-choice-points '()))
+;; Collect a result.  The value of direct? is #t if this result was
+;; directly aborted to the handler, #f otherwise.  Returns three values:
+;; * Should the result be collected?
+;; * Should the computation continue?
+;; * The real value for the computation, for strategies that have to
+;;   wrap nodes.
+(defgeneric collect-result (strategy node direct?))
+(defgeneric record-failure (strategy))
+(defmethod record-failure (strategy)
+  ;; Do nothing.
+  #f)
 
-(define (more-choice-points?)
-  (not (null? all-choice-points)))
+(defclass <all-results-strategy> (<result-strategy>))
 
-(define default-error-proc (thunk (error "No next choice point")))
+(defmethod collect-result ((strategy <all-results-strategy>) node direct?)
+  (values (not (eq? node (void))) #t node))
 
-(define (set-default-error-proc! proc)
-  (set! default-error-proc proc))
+(defclass <one-result-strategy> (<result-strategy>))
 
-(define (next-choice-point (error-proc default-error-proc))
-  ;; (printf "Called next-choice-point\n")
-  (if (null? all-choice-points)
-      (error-proc)
-      (let ((first-cp (first all-choice-points)))
-	;; (printf "Returning choice point ~a\n" first-cp)
-        (set! all-choice-points (rest all-choice-points))
-        first-cp)))
+(defmethod collect-result ((strategy <one-result-strategy>) node direct?)
+  (values #t #f node))
 
-(define (abort/default-prompt proc)
-  (abort/cc
-   (default-continuation-prompt-tag)
-   proc))
+(defclass <n-results-strategy> (<result-strategy>)
+  (number-of-results :initvalue 1)
+  (number-of-results-so-far :initvalue 0)
+  :auto #t
+  :autoaccessors :slot)
 
-(define (maybe-abort/cc tag proc)
-  (if (continuation-prompt-available? tag)
-      (abort/cc tag proc)
-      (proc)))
+(defmethod collect-result ((strategy <n-results-strategy>) node direct?)
+  (inc! (number-of-results-so-far strategy))
+  (define continue?
+    (<= (number-of-results-so-far strategy) (number-of-results strategy)))
+  (values #t
+	  continue?
+	  node))
 
-(define (call/default-prompt proc handler)
-  (call-with-continuation-prompt
-   proc
-   (default-continuation-prompt-tag)
-   handler))
+(defclass <numeric-results-strategy> (<result-strategy>))
 
-;;; TODO: `fail-handler' and `fail' are exactly the same...
+(defmethod collect-result ((strategy <numeric-results-strategy>) node direct?)
+  (values (number? node) #t node))
 
-(define (fail-handler)
-  ;; (printf "Calling fail-handler\n")
-  (abort/default-prompt call-next-choice-point))
+(defclass <search-strategy> ()
+  (result-strategy :initvalue (make <all-results-strategy>))
+  :auto #t
+  :autoaccessors :slot)
 
-(define (call-next-choice-point (error-proc default-error-proc))
-  ;; (printf "Calling call-next-choice-point\n")
-  (define cp (next-choice-point error-proc))
-  (cond (cp
-	 ;; (printf "Found choice point\n")
-	 (invoke-choice-point cp))
+(defgeneric next-node! ((strategy <search-strategy>)))
+(defgeneric add-node! ((strategy <search-strategy>) node))
+(defgeneric add-nodes! ((strategy <search-strategy>) nodes))
+
+(defmethod collect-result ((strategy <search-strategy>) node direct?)
+  (collect-result (result-strategy strategy) node direct?))
+
+(defclass <list-search-strategy> (<search-strategy>)
+  (nodes :initvalue '())
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod next-node! ((strategy <list-search-strategy>))
+  (define ks (nodes strategy))
+  (if (empty? ks)
+      #f
+      (begin
+	(setf! (nodes strategy) (rest ks))
+	(first ks))))
+
+
+(defclass <dfs> (<list-search-strategy>))
+
+(defmethod add-node! ((strategy <dfs>) k)
+  (setf! (nodes strategy)
+	 (list* k (nodes strategy))))
+
+(defmethod add-nodes! ((strategy <dfs>) ks)
+  (setf! (nodes strategy)
+	 (append ks (nodes strategy))))
+
+
+(defclass <bfs> (<list-search-strategy>))
+
+(defmethod add-node! ((strategy <bfs>) k)
+  (setf! (nodes strategy)
+	 (append (nodes strategy) (list k))))
+
+(defmethod add-nodes! ((strategy <bfs>) ks)
+  (setf! (nodes strategy)
+	 (append (nodes strategy) ks)))
+
+(defentityclass <ids-node> ()
+  depth
+  value
+  :auto #t
+  :autoaccessors :class-slot)
+
+(defaftermethod initialize ((node <ids-node>) initargs)
+  (set-instance-proc! node (ids-node-value node)))
+
+(defaftermethod set-ids-node-value! ((node <ids-node>) value)
+  (set-instance-proc! node value))
+
+(defclass <ids> (<search-strategy>)
+  (nodes :initvalue '())
+  (initial-nodes :initvalue #f)
+  (max-depth :initvalue 1)
+  (curr-depth :initvalue 0)
+  (need-deepening? :initvalue #f)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ((strategy <ids>) result direct?)
+  (if (or (and (not direct?) (= (max-depth strategy) (curr-depth strategy)))
+	  (and direct? (= (max-depth strategy) (add1 (curr-depth strategy)))))
+      (call-next-method)
+      (values #f #t #f)))
+
+(defmethod next-node! ((strategy <ids>))
+  (define ns (nodes strategy))
+  (cond ((empty? ns)
+	 (cond ((need-deepening? strategy)
+		(unless (initial-nodes strategy)
+		  (error "Iterative deepening without initial nodes?"))
+		(setf! (need-deepening? strategy) #f)
+		(setf! (max-depth strategy) (add1 (max-depth strategy)))
+		(setf! (nodes strategy) (rest (initial-nodes strategy)))
+		(let ((node (first (initial-nodes strategy))))
+		  (setf! (curr-depth strategy) (ids-node-depth node))
+		  node))
+	       (else #f)))
 	(else
-	 ;; (printf "call-next-choice-point: no next choice point\n")
-	 (error-proc))))
-  
-(define (fail)
-  ;; (printf "Called fail\n")
-  ;; (printf "Choice points: ~a\n" all-choice-points)
-  (abort/default-prompt call-next-choice-point))
+	 (setf! (nodes strategy) (rest ns))
+	 (let ((node (first ns)))
+	   (setf! (curr-depth strategy) (ids-node-depth node))
+	   node))))
 
-(define failed-call-sites (make-hash))
+(define (maybe-make-ids-node strategy val)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+	     #f)
+      (make <ids-node>
+	:depth (add1 (curr-depth strategy))
+	:value val)))
 
-(define (unfail-all-callsites)
-  (set! failed-call-sites (make-hash)))
+(define (maybe-make-ids-nodes strategy vals)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+	     #f)
+      (map (lambda (val)
+	     (make <ids-node>
+	       :depth (add1 (curr-depth strategy))
+	       :value val))
+	   vals)))
 
-(define-syntax fail-once
-  (lambda (stx)
-    (syntax-case stx ()
-      ((_) (let ((id (gensym)))
-	     #`(if (hash-ref failed-call-sites '#,id #f)
-		   'failed-before
-		   (begin
-		     (hash-set! failed-call-sites '#,id #t)
-		     (fail))))))))
+(defmethod add-node! ((strategy <ids>) k)
+  (let ((new-node (maybe-make-ids-node strategy k)))
+    (when new-node
+      (unless (initial-nodes strategy)
+	(setf! (initial-nodes strategy) (list new-node)))
+      (setf! (nodes strategy)
+	     (list* new-node (nodes strategy))))))
+
+(defmethod add-nodes! ((strategy <ids>) ns)
+  ;; We suppose that the new nodes are all at the same depth
+  (let ((new-nodes (maybe-make-ids-nodes strategy ns)))
+    (when new-nodes
+      (unless (initial-nodes strategy)
+	(setf! (initial-nodes strategy) new-nodes))
+      (setf! (nodes strategy)
+	     (append new-nodes (nodes strategy))))))
 
 
-(define-syntax fail-times
-  (lambda (stx)
-    (syntax-case stx ()
-      ((_ n) (let ((id (gensym)))
-	       #`(let ((prev (hash-ref failed-call-sites '#,id 0)))
-		   (cond ((< prev n)
-			  (hash-set! failed-call-sites '#,id (add1 prev))
-			  (fail))
-			 (else
-			  'failed-too-often-before))))))))
+;;; Amb and friends
 
-(define (create-choice-points form . thunks)
+(define amb-tag (make-continuation-prompt-tag 'amb))
+(define amb-search-strategy (make-parameter #f))
+
+(define-syntax amb
+  (syntax-rules ()
+    ((_ value ...)
+     (call-with-composable-continuation
+      (lambda (cont)
+	(add-nodes!
+	 (amb-search-strategy)
+	 (list (lambda ()
+		 (cont value)) ...))
+	(fail))
+      amb-tag))))
+
+(define (deliver value)
   (call-with-composable-continuation
-   (lambda (comp)
-     (let ((new-cps (map (lambda (proc)
-			   (define new-cont
-			     (thunk
-			       ;; (printf "~a: Calling stored cont\n" form)
-			      (comp (proc))))
-			   (choice-point new-cont))
-			 thunks)))
-       (set! all-choice-points
-	     (append new-cps all-choice-points)))
-     (fail))))
+   (lambda (cont)
+     (define strategy (amb-search-strategy))
+     (add-node!
+      strategy
+      (lambda ()
+	(abort/cc amb-tag 'result (cont 'command-continuation))))
+     (abort/cc amb-tag 'direct-result value))
+   amb-tag)
+  (void))
 
-(define-syntax-rule (amb alt ...)
-  (create-choice-points '(amb alt ...) (thunk alt) ...))
+(define (fail)
+  (define strategy (amb-search-strategy))
+  (define cc (next-node! strategy))
+  (record-failure strategy)
+  (if cc
+      (abort/cc amb-tag 'result (cc))
+      (abort/cc amb-tag 'failure #f)))
 
-(define (amb-assert exp)
-  (unless exp
-    (fail)))
+(define-syntax collect
+  (syntax-rules ()
+    ((_ (search-strategy) body ...)
+     (let ((result '()))
+       (define (amb-handler kind value)
+	 (case kind
+	   ((failure)
+	    (reverse result))
+	   ((result direct-result)
+	    (let-values (((collect-it? continue? real-value)
+			  (collect-result (amb-search-strategy)
+					  value
+					  (eq? kind 'direct-result))))
+	      (when collect-it?
+		(set! result (list* value result)))
+	      (when continue?
+		(call-with-continuation-prompt 
+		 fail amb-tag amb-handler)))
+	    (reverse result))))
+       (parameterize ((amb-search-strategy search-strategy))
+	 (call-with-continuation-prompt
+	  (thunk body ...) amb-tag amb-handler))))
+    ((_ () body ...)
+     (collect ((make <dfs>)) body ...))))
 
-(define bag-of-prompt-tag (make-continuation-prompt-tag 'bag-of))
-
-(define-syntax-rule (bag-of exp)
-  (begin
-    (letrec ((bag-of-handler
-	      (lambda (res)
-		;; (printf "Called bag-of-handler ~a\n" res)
-		(call/default-prompt res bag-of-handler))))
-      (let ((saved-error-proc default-error-proc)
-	    (result '()))
-	(call-with-current-continuation
-	 (lambda (exit)
-	   (set-default-error-proc!
-	     (lambda ()
-	       ;; (printf "Calling exit procedure\n")
-	       (set-default-error-proc! saved-error-proc)
-	       ;; (printf "Calling exit\n")
-	       (exit (void))))
-	   (let* ((init-value (call/default-prompt 
-			       (thunk exp) bag-of-handler)))
-	     ;; (printf "Computed init-value ~a\n" init-value)
-	     (unless (void? init-value)
-	       (set! result (cons init-value result)))
-	     (define (loop)
-	       ;; (printf "Starting loop with result = ~a\n" result)
-	       ;; (printf "Number of choice points = ~a\n" (length all-choice-points))
-	       (cond ((more-choice-points?)
-		      ;; (printf "Calling next choice point\n")
-		      (let ((value (call/default-prompt
-				    call-next-choice-point bag-of-handler)))
-			;; (printf "Got value ~a\n" value)
-			(unless (void? value)
-			  (set! result (cons value result)))
-			(abort/default-prompt loop)))
-		     (else
-		      ;; (printf "Reversing result ~a\n" result)
-		      (reverse result))))
-	     (begin0 (loop)
-	       (set-default-error-proc! saved-error-proc)))))))))
 
 (define (an-integer->= n)
   (amb n (an-integer->= (+ n 1))))
@@ -185,14 +288,85 @@
       (fail)
       (amb (car lst) (an-element-of (cdr lst)))))
 
+;;; TODO: Move the tests to test-backtracking.
 
-(define (test-14a)
-  (clear-all-choice-points)
-  (bag-of
-   (let ((x (amb 1 2 3 4 5))
-	 (y (amb 2 4 6)))
-     (printf "Trying: ~a\n" (list x y))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
+(define (amb-test-01)
+  (printf "Got ~a\n" (collect () (amb 1 2 3))))
+
+(define (amb-test-02)
+  (printf "Got ~a\n" 
+	  (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))))
+
+(define (amb-test-03)
+  (printf "Got ~a\n" 
+	  (collect () (amb 1
+			   (collect () (amb 'foo (fail) 'baz))
+			   2
+			   (fail)
+			   (amb 'a 'b 'c)
+			   3))))
+
+(define (amb-test-04)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))))
+
+(define (amb-test-05)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05a)
+  (printf "Got ~a\n"
+	  (collect ((make <bfs>))
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05b)
+  (printf "Got ~a\n"
+	  (collect ((make <ids>))
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05c)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05d)
+  (printf "Got ~a\n"
+	  (collect ((make <ids>))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05e)
+  (printf "Got ~a\n"
+	  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05f)
+  (printf "Got ~a\n"
+	  (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-06)
+  (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+(define (amb-test-06a)
+  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+
+
+
