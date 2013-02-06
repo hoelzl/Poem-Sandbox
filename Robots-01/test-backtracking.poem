@@ -2,352 +2,329 @@
 
 (require "backtracking.poem")
 (require (rename-in rackunit (fail fail-test)))
+(require rackunit/text-ui)
 
-(define in-automated-test (make-parameter #f))
-(define (test-printf . args)
-  (unless (in-automated-test)
-    (apply printf args)))
+(provide amb-suite big-amb-suite)
 
-(define-syntax run-amb-test
-  (syntax-rules ()
-    ((_ fun res)
-     (parameterize ((in-automated-test #t))
-       (test-begin
-	(check equal? (fun) res))))))
+(define-test-suite amb-suite
+  (test-case
+   "Amb Test 11"
+   (check-equal?
+    (collect () (amb 1 2 3))
+    '(1 2 3)))
 
-(define (test-11)
-  (collect 
-   ()
-   (test-printf "Value: ~a\n" (amb 1 2 3))
-   (test-printf "Before failing in test-11\n")
-   (fail)
-   (test-printf "After failing in test-11\n")))
+  (test-case
+   "Amb Test 12"
+   (check-equal?
+    (collect ()
+	     (amb 1 2 3)
+	     (fail))
+    '()))
 
-(run-amb-test test-11 '())
+  (test-case
+   "Amb Test 13"
+   (check-equal?
+    (collect () (amb 1 2 (amb 'a 'b 'c) 3))
+    '(1 2 a b c 3)))
 
-(define (test-12)
-  (collect ()
-	   (test-printf "Result: ~a\n" (amb 1 2 (amb 'a 'b 'c) 3))
-	   (fail)))
+  (test-case
+   "Amb Test 13a"
+   (check-equal?
+    (collect () (an-integer-between 3 6))
+    '(3 4 5 6)))
 
-(run-amb-test test-12 '())
+  (test-case
+   "Amb Test 13b"
+   (check-equal?
+    (collect () (let ((x (an-integer-between 3 6)))
+		  x))
+    '(3 4 5 6)))
 
-(define (test-13)
-  (collect () (amb 1 2 (amb 'a 'b 'c) 3)))
+  (test-case
+   "Amb Test 13c"
+   (check-equal?
+    (collect () (let ((x (an-integer-between 3 6)))
+		  (if (even? x)
+		      x
+		      (fail))))
+    '(4 6)))
 
-(run-amb-test test-13 '(1 2 a b c 3))
+  (test-case
+   "Amb Test 13d"
+   (check-equal?
+    (collect () (amb 1 (fail) 2))
+    '(1 2)))
 
-(define (test-13a)
-  (collect () (an-integer-between 3 6)))
+  (test-case
+   "Amb Test 13e"
+   (check-equal?
+    (collect () (amb (fail) 1 2))
+    '(1 2)))
 
-(run-amb-test test-13a '(3 4 5 6))
+  (test-case
+   "Amb Test 13f"
+   (check-equal?
+    (collect () (amb 1 (fail) 2 3 4))
+    '(1 2 3 4)))
 
-(define (test-13b)
-  (collect () (let ((x (an-integer-between 3 6)))
-		 x)))
+  (test-case
+   "Amb Test 13g"
+   (check-equal?
+    (collect () (amb 1 (fail) 2 3 4 (fail)))
+    '(1 2 3 4)))
 
-(run-amb-test test-13b '(3 4 5 6))
+  (test-case
+   "Amb Test 13h"
+   (check-equal?
+    (collect () (let ((x (amb 3 4 5 6)))
+		  (if (even? x)
+		      x
+		      (fail))))
+    '(4 6)))
 
-(define (test-13c)
-  (collect () (let ((x (an-integer-between 3 6)))
-		 (if (even? x)
-		     x
-		     (fail)))))
+  (test-case
+   "Amb Test 14"
+   (check-equal?
+    (collect ()
+	     (let ((x (amb 1 2 3 4 5))
+		   (y (amb 2 4 6)))
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
+    '((2 6) (4 4) (4 6))))
 
-(run-amb-test test-13c '(4 6))
-
-(define (test-13d)
-  (collect () (amb 1 (fail) 2)))
-
-(run-amb-test test-13d '(1 2))
-
-(define (test-13e)
-  (collect () (amb (fail) 1 2)))
-
-(run-amb-test test-13e '(1 2))
-
-(define (test-13f)
-  (collect () (amb 1 (fail) 2 3 4)))
-
-(run-amb-test test-13f '(1 2 3 4))
-
-(define (test-13g)
-  (collect () (amb 1 (fail) 2 3 4 (fail))))
-
-(run-amb-test test-13g '(1 2 3 4))
-
-(define (test-13h)
-  (collect () (let ((x (amb 3 4 5 6)))
-		 (if (even? x)
-		     x
-		     (fail)))))
-
-(run-amb-test test-13h '(4 6))
-
-(define (test-14)
-  (collect ()
-   (let ((x (amb 1 2 3 4 5))
-	 (y (amb 2 4 6)))
-     (test-printf "Trying: ~a\n" (list x y))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (begin
-	   (test-printf "Result: ~a\n" (list x y))
-	   (list x y))
-	 (fail)))))
-
-(run-amb-test test-14 '((2 6) (4 4) (4 6)))
-
-(define (test-14a)
-  (collect ()
-   (let ((x (an-integer-between 1 10))
-	 (y (an-integer-between 1 10)))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
-
-(run-amb-test test-14a '((2 6) (2 8) (2 10)
-			 (4 4) (4 6) (4 8) (4 10)
-			 (6 2) (6 4) (6 6) (6 8) (6 10)
-			 (8 2) (8 4) (8 6) (8 8) (8 10)
-			 (10 2) (10 4) (10 6) (10 8) (10 10)))
+  (test-case
+   "Amb Test 14a"
+   (check-equal?
+    (collect ()
+	     (let ((x (an-integer-between 1 10))
+		   (y (an-integer-between 1 10)))
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
+    '((2 6) (2 8) (2 10)
+      (4 4) (4 6) (4 8) (4 10)
+      (6 2) (6 4) (6 6) (6 8) (6 10)
+      (8 2) (8 4) (8 6) (8 8) (8 10)
+      (10 2) (10 4) (10 6) (10 8) (10 10))))
 
 
-(define (test-14b)
-  (collect ()
-   (let ((x (an-integer-between* 1 10))
-	 (y (an-integer-between* 1 10)))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
+  (test-case
+   "Amb Test 14b"
+   (check-equal?
+    (collect ()
+	     (let ((x (an-integer-between* 1 10))
+		   (y (an-integer-between* 1 10)))
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
 
+    '((2 6) (2 8) (2 10)
+      (4 4) (4 6) (4 8) (4 10)
+      (6 2) (6 4) (6 6) (6 8) (6 10)
+      (8 2) (8 4) (8 6) (8 8) (8 10)
+      (10 2) (10 4) (10 6) (10 8) (10 10))))
 
-(run-amb-test test-14b '((2 6) (2 8) (2 10)
-			 (4 4) (4 6) (4 8) (4 10)
-			 (6 2) (6 4) (6 6) (6 8) (6 10)
-			 (8 2) (8 4) (8 6) (8 8) (8 10)
-			 (10 2) (10 4) (10 6) (10 8) (10 10)))
+  (let ((gen-numbers
+	 (lambda ()
+	   (let ((x (an-integer-between 1 6))
+		 (y (an-integer-between 1 6)))
+	     (if (and (even? x) (even? y)
+		      (>= (+ x y) 7))
+		 (list x y)
+		 (fail))))))
+    (test-case
+     "Amb Test 14c"
+     (check-equal?
+      (collect ()
+	       (gen-numbers))
+      '((2 6) (4 4) (4 6) (6 2) (6 4) (6 6)))))
 
-(define (gen-numbers)
-  (let ((x (an-integer-between 1 6))
-	(y (an-integer-between 1 6)))
-    (test-printf "Trying: ~a\n" (list x y))
-    (if (and (even? x) (even? y)
-	     (>= (+ x y) 7))
-	(list x y)
-	(fail))))
+  (test-case
+   "Amb Test 15"
+   (check-equal?
+    (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
+	     (let ((x (an-integer->= 1)))
+	       (when (< x 10)
+		 (fail))
+	       x))
+    '(10)))
 
-(define (test-14c)
-  (collect ()
-   (gen-numbers)))
+  (test-case
+   "Amb Test 15a"
+   (check-equal?
+    (collect ((make <dfs> :result-strategy (make <n-results-strategy>
+					     :number-of-results 5)))
+	     (let ((x (an-integer->= 1)))
+	       (when (< x 10)
+		 (fail))
+	       x))
+    '(10 11 12 13 14)))
 
-(run-amb-test test-14c '((2 6) (4 4) (4 6) (6 2) (6 4) (6 6)))
-
-;;; The next two tests take rather long to run and are meant for
-;;; interactive testing.
-
-(define (test-14d)
-  (collect ()
-   (let ((x (an-integer-between 1 50))
-	 (y (an-integer-between 1 50)))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
-
-(define (test-14e)
-  (collect ()
-   (let ((x (an-integer-between* 1 100))
-	 (y (an-integer-between* 1 100)))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
-
-
-(define (test-14f)
-  (collect ((make <ids>))
-   (let ((x (an-integer-between* 1 100))
-	 (y (an-integer-between* 1 100)))
-     (if (and (even? x) (even? y)
-	      (>= (+ x y) 7))
-	 (list x y)
-	 (fail)))))
-
-
-(define (test-15)
-  (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
-   (let ((x (an-integer->= 1)))
-     (when (< x 10)
-       (fail))
-     x)))
-
-(run-amb-test test-15 '(10))
-
-(define (test-15a)
-  (collect ((make <dfs> :result-strategy (make <n-results-strategy>
-					   :number-of-results 5)))
-   (let ((x (an-integer->= 1)))
-     (when (< x 10)
-       (fail))
-     x)))
-
-(run-amb-test test-15a '(10 11 12 13 14))
-
-(define (test-16)
-  (collect
-   ()
-   (define my-fun (lambda args (* (apply + args) (apply * args))))
-   (define fun (amb + - * my-fun))
-   (list (object-name fun) (fun 1 2 3 4))))
-
-(run-amb-test test-16 '((+ 10) (- -8) (* 24) (my-fun 240)))
+  (test-case
+   "Amb Test 16"
+   (check-equal?
+    (collect ()
+	     (define my-fun (lambda args (* (apply + args) (apply * args))))
+	     (define fun (amb + - * my-fun))
+	     (list (object-name fun) (fun 1 2 3 4)))
+    '((+ 10) (- -8) (* 24) (my-fun 240))))
 
 ;;; New tests
 
-(define (test-21)
-  (collect () (amb 1 2 3)))
+  (test-case
+   "Amb Test 21"
+   (check-equal?
+    (collect () (amb 1 2 3))
+    '(1 2 3)))
 
-(run-amb-test test-21 '(1 2 3))
+  (test-case
+   "Amb Test 22"
+   (check-equal?
+    (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))
+    '(1 (foo bar baz) 2 a b c 3)))
 
-(define (test-22)
-  (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3)))
+  (test-case
+   "Amb Test 23"
+   (check-equal?
+    (collect () (amb 1
+		     (collect () (amb 'foo (fail) 'baz))
+		     2
+		     (fail)
+		     (amb 'a 'b 'c)
+		     3))
+    '(1 (foo baz) 2 a b c 3)))
 
-(run-amb-test test-22 '(1 (foo bar baz) 2 a b c 3))
+  (test-case
+   "Amb Test 24"
+   (check-equal?
+    (collect ()
+	     (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))
+    '(1 a 4 5 6 2 b 3)))
 
-(define (test-23)
-  (collect () (amb 1
-		   (collect () (amb 'foo (fail) 'baz))
-		   2
-		   (fail)
-		   (amb 'a 'b 'c)
-		   3)))
-
-(run-amb-test test-23 '(1 (foo baz) 2 a b c 3))
-
-(define (test-24)
-  (collect ()
-	   (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3)))
-
-(run-amb-test test-24 '(1 a 4 5 6 2 b 3))
-
-(define (test-25)
-  (collect ()
-	   (deliver 'a)
-	   (deliver (amb 1 2 3))
-	   (amb 'foo 'bar)))
-
-(run-amb-test test-25 '(a 1 foo bar 2 foo bar 3 foo bar))
-
-
-(define (test-25a)
-  (collect ((make <bfs>))
-	   (deliver 'a)
-	   (deliver (amb 1 2 3))
-	   (amb 'foo 'bar)))
-
-(run-amb-test test-25a '(a 1 2 3 foo bar foo bar foo bar))
+  (test-case
+   "Amb Test 25"
+   (check-equal?
+    (collect ()
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 foo bar 2 foo bar 3 foo bar)))
 
 
-(define (test-25b)
-  (collect ((make <ids>))
-	   (deliver 'a)
-	   (deliver (amb 1 2 3))
-	   (amb 'foo 'bar)))
- 
-(run-amb-test test-25b '(a 1 2 3 foo bar foo bar foo bar))
+  (test-case
+   "Amb Test 25a"
+   (check-equal?
+    (collect ((make <bfs>))
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 2 3 foo bar foo bar foo bar)))
 
 
-(define (test-25c)
-  (collect ()
-	   (deliver 'a)
-	   (deliver (amb 1 (amb 2 3) 4))
-	   (amb 'foo 'bar)))
- 
-(run-amb-test test-25c '(a 1 foo bar 2 foo bar 3 foo bar 4 foo bar))
-
-(define (test-25d)
-  (collect ((make <ids>))
-	   (deliver 'a)
-	   (deliver (amb 1 (amb 2 3) 4))
-	   (amb 'foo 'bar)))
-
-(run-amb-test test-25d '(a 1 4 foo bar 2 3 foo bar foo bar foo bar))
-
-(define (test-25e)
-  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
-	   (deliver 'a)
-	   (deliver (amb 1 (amb 2 3) 4))
-	   (amb 'foo 'bar)))
-
-(run-amb-test test-25e '(a))
-
-(define (test-25f)
-  (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
-	   (deliver 'a)
-	   (deliver (amb 1 (amb 2 3) 4))
-	   (amb 'foo 'bar)))
-
-(run-amb-test test-25f '(1 4 2 3))
+  (test-case
+   "Amb Test 25b"
+   (check-equal?
+    (collect ((make <ids>))
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 2 3 foo bar foo bar foo bar)))
 
 
-(define (nd)
-  (display "(1) ")
-  (deliver 'a)
-  (display "(2) ")
-  (deliver (amb 1 (amb 2 3) 4))
-  (display "(3) ")
-  (amb 'foo 'bar))
+  (test-case
+   "Amb Test 25c"
+   (check-equal?
+    (collect ()
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a 1 foo bar 2 foo bar 3 foo bar 4 foo bar)))
 
-(define (test-25g)
-  (collect () (nd)))
+  (test-case
+   "Amb Test 25d"
+   (check-equal?
+    (collect ((make <ids>))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a 1 4 foo bar 2 3 foo bar foo bar foo bar)))
 
-(define (test-25h)
-  (collect ((make <dfs>)) (nd)))
+  (test-case
+   "Amb Test 25e"
+   (check-equal?
+    (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a)))
 
-(define (test-25i)
-  (collect ((make <bfs>)) (nd)))
+  (test-case
+   "Amb Test 25f"
+   (check-equal?
+    (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(1 4 2 3)))  
 
-(define (test-25j)
-  (collect ((make <ids>)) (nd)))
+  ;; (define (nd)
+  ;;   (display "(1) ")
+  ;;   (deliver 'a)
+  ;;   (display "(2) ")
+  ;;   (deliver (amb 1 (amb 2 3) 4))
+  ;;   (display "(3) ")
+  ;;   (amb 'foo 'bar))
 
-(define (test-26)
-  (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+  ;; (test-case "Amb Test 25g"
+  ;;   (collect () (nd)))
 
-(define (test-26a)
-  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
-	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+  ;; (test-case "Amb Test 25h"
+  ;;   (collect ((make <dfs>)) (nd)))
 
-(define-syntax-rule (tests id ...)
-  (list (list 'id 
-	      (thunk
-	       (test-printf "Test Result: ~a\n"
-		       (call-with-continuation-prompt
-			id
-			(default-continuation-prompt-tag))))) ...))
+  ;; (test-case "Amb Test 25i"
+  ;;   (collect ((make <bfs>)) (nd)))
 
-(define all-tests
-  (tests test-11
-	 test-12 
-	 test-13 test-13a test-13b test-13c test-13d
-	 test-13e test-13f test-13g test-13h
-	 test-14 test-14a test-14b
-	 test-15
-	 test-16
+  ;; (test-case "Amb Test 25j"
+  ;;   (collect ((make <ids>)) (nd)))
 
-	 test-21
-	 test-22
-	 test-23
-	 test-24
-	 test-25 test-25a test-25b test-25c test-25d test-25e test-25f
-	 test-26 test-26a))
+  ;; (test-case "Amb Test 26"
+  ;;   (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
 
-(define (run-all-tests)
-  (for-each (lambda (test)
-	      (test-printf "\n\nCalling test ~a\n" (first test))
-	      ((second test)))
-	    all-tests))
+  ;; (test-case "Amb Test 26a"
+  ;;   (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+  ;; 	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+  )
 
-'performed-all-tests
+(define-test-suite big-amb-suite
+  amb-suite
+
+  (test-case "Amb Test 14d"
+    (collect ()
+     (let ((x (an-integer-between 1 50))
+  	 (y (an-integer-between 1 50)))
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14e"
+    (collect ()
+     (let ((x (an-integer-between* 1 100))
+  	 (y (an-integer-between* 1 100)))
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14f"
+    (collect ((make <ids>))
+     (let ((x (an-integer-between* 1 100))
+  	 (y (an-integer-between* 1 100)))
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail))))))
