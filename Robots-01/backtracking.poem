@@ -25,11 +25,13 @@
 	 need-deepening? set-need-deepening?!
 
 	 collect
-	 amb deliver fail
+	 amb amb* deliver fail
+	 amb-list amb-list*
 
 	 an-integer->= an-integer-<= 
 	 an-integer-between an-integer-between*
-	 a-multiple-of an-element-of)
+	 a-multiple-of a-factor-of
+	 an-element-of)
 
 (require racket/control)
 
@@ -229,7 +231,7 @@
 	(debug-printf "amb: adding nodes\n")
 	(add-nodes!
 	 (amb-search-strategy)
-	 (list (lambda ()
+	 (list (thunk
 		 (debug-printf "Calling cont\n")
 		 (cont value)
 		 (debug-printf "Should never get here\n")) ...))
@@ -238,6 +240,50 @@
 	#;(error "Amb fell through?")
 	)
       amb-tag))))
+
+
+(define (amb-list lst)
+  (call-with-current-continuation
+   (lambda (cont)
+     (debug-printf "amb-list: adding nodes\n")
+     (add-nodes!
+      (amb-search-strategy)
+      (map (lambda (val)
+	     (thunk
+	      (debug-printf "Calling value cont\n")
+	      (cont (val))
+	      (debug-printf "Should never get here\n")))
+	   lst))
+     (debug-printf "amb-list: failing: strategy ~a\n"
+		   (amb-search-strategy))
+     (fail))
+   amb-tag))
+
+;;; Should behave identical to amb
+(define-syntax amb*
+  (syntax-rules ()
+    ((_ value ...)
+     (amb-list* (list (thunk value) ...)))))
+
+
+;;; Similar to amb-list, but does not expect thunks as arguments.
+;;; This behaves differently when backtracking!
+(define (amb-list* lst)
+  (call-with-current-continuation
+   (lambda (cont)
+     (debug-printf "amb-list: adding nodes\n")
+     (add-nodes!
+      (amb-search-strategy)
+      (map (lambda (val)
+	     (thunk
+	      (debug-printf "Calling value cont\n")
+	      (cont val)
+	      (debug-printf "Should never get here\n")))
+	   lst))
+     (debug-printf "amb-list: failing: strategy ~a\n"
+		   (amb-search-strategy))
+     (fail))
+   amb-tag))
 
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
@@ -320,9 +366,9 @@
   (amb n (an-integer-<= (- n 1))))
 
 (define (an-integer-between m n)
-  (if (> m n)
-      (fail)
-      (amb m (an-integer-between (+ m 1) n))))
+  (amb-list 
+   (for/list ((i (in-range m (add1 n))))
+     i)))
 
 (define-for-syntax (make-integer-list m n)
   (if (m . > . n)
@@ -334,11 +380,38 @@
     ((_ m n)
      #`(amb #,@(make-integer-list (syntax->datum #'m) (syntax->datum #'n))))))
 
+(define (an-integer-between** m n)
+  (if (> m n)
+      (fail)
+      (amb m (an-integer-between (+ m 1) n))))
+
 ;; (an-integer-between* 1 10)
 
 (define (a-multiple-of k)
   (let ((multiplier (an-integer->= 1)))
     (* multiplier k)))
+
+(define (a-factor-of** k)
+  (let ((i (an-integer-between 2 (floor (/ k 2)))))
+    (if (zero? (modulo k i))
+	i
+	(fail))))
+
+(define (a-factor-of* k)
+  (let loop ((i 2))
+    (cond ((zero? (modulo k i))
+	   (deliver i)
+	   (loop (add1 i)))
+	  ((i . >= . (floor (/ k 2)))
+	   (fail))
+	  (else
+	   (loop (add1 i))))))
+
+(define (a-factor-of k)
+  (for ((i (in-range 2 (floor (/ k 2)))))
+    (when (zero? (modulo k i))
+      (deliver i)))
+  (fail))
 
 (define (an-element-of lst)
   (if (null? lst)
