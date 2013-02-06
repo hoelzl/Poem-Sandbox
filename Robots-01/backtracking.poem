@@ -4,6 +4,7 @@
 	 collect-result
 	 <all-results-strategy> <one-result-strategy>
 	 <n-results-strategy>
+	 record-failure!
 	 number-of-results number-of-results-so-far
 	 <numeric-results-strategy>
 	 
@@ -49,8 +50,8 @@
 ;; * The real value for the computation, for strategies that have to
 ;;   wrap nodes.
 (defgeneric collect-result (strategy node))
-(defgeneric record-failure (strategy))
-(defmethod record-failure (strategy)
+(defgeneric record-failure! (strategy))
+(defmethod record-failure! (strategy)
   ;; Do nothing.
   #f)
 
@@ -233,7 +234,9 @@
 		 (cont value)
 		 (debug-printf "Should never get here\n")) ...))
 	(debug-printf "amb: failing: strategy ~a\n" (amb-search-strategy))
-	(fail))
+	(fail)
+	#;(error "Amb fell through?")
+	)
       amb-tag))))
 
 (define (deliver value)
@@ -251,7 +254,9 @@
       (thunk
        (debug-printf "Delivering value ~a\n" value)
        (abort/cc amb-tag 'deliver value)))
-     (fail))
+     (fail)
+     #;(error "Deliver fell through?")
+     )
    amb-tag)
   (void))
 
@@ -259,7 +264,7 @@
   (debug-printf "Failing\n")
   (define strategy (amb-search-strategy))
   (define cc (next-node! strategy))
-  (record-failure strategy)
+  (record-failure! strategy)
   (if cc
       (abort/cc amb-tag 'cont cc)
       (abort/cc amb-abort-tag)))
@@ -281,12 +286,11 @@
 		  (call-with-continuation-prompt 
 		   fail amb-tag amb-handler))
 		 (else
-		  (abort/cc amb-abort-tag)))))
+		  (abort/cc amb-abort-tag)))
+	   #;(error "Fell through process-result?")
+	   ))
        (define (amb-handler kind value)
 	 (case kind
-	   ((failure)
-	    ;; TODO: delete this case
-	    (debug-printf "In collect/failure: ~a\n" value))
 	   ((cont)
 	    (debug-printf "In collect/cont 1: ~a\n" value)
 	    (let ((res (call-with-continuation-prompt 
@@ -295,7 +299,8 @@
 	   ((deliver)
 	    (debug-printf "In collect/deliver: ~a\n" value)
 	    (process-result value))
-	   (else (error "Fell through amb-handler."))))
+	   #;(else (error "Fell through amb-handler."))
+	   ))
        (parameterize ((amb-search-strategy search-strategy))
 	 (call-with-continuation-prompt
 	  (thunk
