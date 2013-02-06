@@ -8,6 +8,12 @@
 
 (define-test-suite amb-suite
   (test-case
+   "Amb Test 10"
+   (check-equal?
+    (collect () 1 2 3)
+    '(3)))
+
+  (test-case
    "Amb Test 11"
    (check-equal?
     (collect () (amb 1 2 3))

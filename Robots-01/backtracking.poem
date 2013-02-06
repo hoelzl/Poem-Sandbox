@@ -284,7 +284,6 @@
 		   (amb-search-strategy))
      (fail))
    amb-tag))
-
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
   (call-with-current-continuation
@@ -292,7 +291,7 @@
      (define strategy (amb-search-strategy))
      (add-node!
       strategy
-      (lambda ()
+      (thunk
 	(debug-printf "Continuing after delivering a value\n")
 	(cont 'command-continuation)))
      (add-node!
@@ -351,7 +350,20 @@
 	 (call-with-continuation-prompt
 	  (thunk
 	   (call-with-continuation-prompt
-	    (thunk body ...) amb-tag amb-handler))
+	    (thunk
+	     (call-with-current-continuation
+	      (lambda (cont)
+		(add-node!
+		 (amb-search-strategy)
+		 (thunk
+		  (debug-printf "Returning Initial value\n")
+		  (abort/cc amb-tag 'deliver 
+			    ;; Cannot use `begin' here, since this
+			    ;; results in an error when body...
+			    ;; starts with a definition
+			    (let () body ...))))
+		(fail))
+	      amb-tag)) amb-tag amb-handler))
 	  amb-abort-tag
 	  (thunk (reverse result)))
 	 (reverse result))))
@@ -366,7 +378,7 @@
   (amb n (an-integer-<= (- n 1))))
 
 (define (an-integer-between m n)
-  (amb-list 
+  (amb-list*
    (for/list ((i (in-range m (add1 n))))
      i)))
 
@@ -417,17 +429,3 @@
   (if (null? lst)
       (fail)
       (amb (car lst) (an-element-of (cdr lst)))))
-
-
-(define (test-15)
-  (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
-   (let ((x (an-integer->= 1)))
-     (when (< x 2)
-       (fail))
-     x)))
-
-(define (test-25b)
-  (collect ((make <ids>))
-	   (deliver 'a)
-	   (deliver (amb 1 2 3))
-	   (amb 'foo 'bar)))
