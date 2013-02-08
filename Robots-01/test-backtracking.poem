@@ -311,7 +311,7 @@
   (test-case "Amb Test 14d"
     (collect ()
      (let ((x (an-integer-between 1 50))
-  	 (y (an-integer-between 1 50)))
+	   (y (an-integer-between 1 50)))
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
@@ -319,8 +319,8 @@
 
   (test-case "Amb Test 14e"
     (collect ()
-     (let ((x (an-integer-between* 1 100))
-  	 (y (an-integer-between* 1 100)))
+     (let ((x (an-integer-between 1 100))
+	   (y (an-integer-between 1 100)))
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
@@ -328,9 +328,10 @@
 
   (test-case "Amb Test 14f"
     (collect ((make <ids>))
-     (let ((x (an-integer-between* 1 100))
-  	 (y (an-integer-between* 1 100)))
+     (let ((x (an-integer-between 1 100))
+	   (y (an-integer-between 1 100)))
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
   	 (fail))))))
+

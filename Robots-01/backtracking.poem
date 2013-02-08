@@ -29,7 +29,7 @@
 	 amb-list amb-list*
 
 	 an-integer->= an-integer-<= 
-	 an-integer-between an-integer-between*
+	 an-integer-between an-integer-between* an-integer-between**
 	 a-multiple-of a-factor-of
 	 an-element-of)
 
@@ -65,7 +65,8 @@
 (defclass <one-result-strategy> (<result-strategy>))
 
 (defmethod collect-result ((strategy <one-result-strategy>) node)
-  (values #t #f node))
+  (define node-is-void? (eq? node (void)))
+  (values (not node-is-void?) node-is-void? node))
 
 (defclass <n-results-strategy> (<result-strategy>)
   (number-of-results :initvalue 1)
@@ -74,6 +75,7 @@
   :autoaccessors :slot)
 
 (defmethod collect-result ((strategy <n-results-strategy>) node)
+  ;; TODO: Check for void results
   (inc! (number-of-results-so-far strategy))
   (define continue?
     (< (number-of-results-so-far strategy) (number-of-results strategy)))
@@ -86,12 +88,19 @@
 (defmethod collect-result ((strategy <numeric-results-strategy>) node)
   (values (number? node) #t node))
 
+
 (defclass <search-strategy> ()
   (result-strategy :initvalue (make <all-results-strategy>))
   :auto #t
   :autoaccessors :slot)
 
 (defgeneric next-node! ((strategy <search-strategy>)))
+
+(defgeneric add-initial-node! ((strategy <search-strategy>) node))
+(defmethod add-initial-node! ((strategy <search-strategy>) node)
+  (add-node! strategy node))
+;;; Do we need add initial-nodes! as well?
+
 (defgeneric add-node! ((strategy <search-strategy>) node))
 (defgeneric add-nodes! ((strategy <search-strategy>) nodes))
 
@@ -169,7 +178,7 @@
 		(unless (initial-nodes strategy)
 		  (error "Iterative deepening without initial nodes?"))
 		(setf! (need-deepening? strategy) #f)
-		(setf! (max-depth strategy) (add1 (max-depth strategy)))
+		(inc! (max-depth strategy))
 		(setf! (nodes strategy) (rest (initial-nodes strategy)))
 		(let ((node (first (initial-nodes strategy))))
 		  (setf! (curr-depth strategy) (ids-node-depth node))
@@ -284,6 +293,7 @@
 		   (amb-search-strategy))
      (fail))
    amb-tag))
+
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
   (call-with-current-continuation
@@ -353,7 +363,7 @@
 	    (thunk
 	     (call-with-current-continuation
 	      (lambda (cont)
-		(add-node!
+		(add-initial-node!
 		 (amb-search-strategy)
 		 (thunk
 		  (debug-printf "Returning Initial value\n")

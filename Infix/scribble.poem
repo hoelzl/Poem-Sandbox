@@ -1,0 +1,9 @@
+#lang at-exp poem
+
+(define (fact n)
+  (if (= n 1)
+      1
+      (* n (fact (- n 1)))))
+
+@printf["\nThe result of @fact[10] is: ~a\n" @fact[10]]
+

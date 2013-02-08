@@ -1,16 +1,27 @@
 #lang poem
 
 (require "utils.poem")
+(require racket/set)
 
 (provide <relation>
 	 name arity functor clauses
-	 clear-all-relations name+arity->functor
+	 add-clause variables
+	 
+	 all-relations clear-all-relations
 	 remove-relation! find-relation set-find-relation!
+
+	 name+arity->functor
+	 predicate-names->functors
+	 enable-checks-for-parse-functor-description?
+	 parse-functor-description
+
 	 <horn-clause>
 	 functor head
 	 <horn-fact>
 	 <horn-rule>
+	 body
 	 :-
+
 	 <logic-variable>
 	 name value
 	 make-logic-variable
@@ -23,7 +34,8 @@
 
 (defclass <relation> ()
   (name :initializer (required-initarg :name))
-  (arity :initializer (required-initarg :arity))
+  (arity :initializer (required-initarg :arity)
+	 :type <integer>)
   (functor)
   (clauses :initvalue '())
   :printer #t
@@ -32,10 +44,20 @@
 
 (define all-relations (make-hasheq))
 
-(define clear-all-relations (setf! all-relations (make-hasheq)))
+(define (clear-all-relations) (setf! all-relations (make-hasheq)))
 
 (define (name+arity->functor name arity) 
   (string->symbol (format "~a/~a" name arity)))
+
+(define (predicate-names->functors expression)
+  (if (pair? expression)
+      (let ((head (first expression)))
+	(if (symbol? head)
+	    (let ((tail (rest expression)))
+	      (list* (name+arity->functor head (length tail))
+		     (map predicate-names->functors tail)))
+	    (map predicate-names->functors expression)))
+      expression))
 
 (define (remove-relation! name (arity #f))
   (if arity
@@ -55,21 +77,67 @@
 	(hash-set! all-relations functor new-relation))
       (hash-set! all-relations name new-relation)))
 
-;;; TODO: Allow specification of functor instead of name and arity.
+
+(define enable-checks-for-parse-functor-description? #t)
+
+(define (parse-functor-description functor name arity)
+  (when enable-checks-for-parse-functor-description?
+    (when (and functor (not (symbol? functor)))
+      (error "Functor ~a is not a symbol." functor))
+    (when (and name (not (symbol? name)))
+      (error "Relation name ~a is not a symbol." name))
+    (when (and arity (or (not (integer? arity)) (arity . < . 0)))
+      (error "Arity ~a is not a non-negative integer." arity)))
+  (cond ((and name arity)
+	 (cond (functor
+		(when (and enable-checks-for-parse-functor-description? 
+			   (not (equal? functor (name+arity->functor name arity))))
+		  (error "Name ~a and arity ~a do not match functor ~a."
+			 name arity functor)))
+	       (else
+		(set! functor (name+arity->functor name arity)))))
+	(functor
+	 (define name+arity (regexp-match "^(.+)/([1-9][0-9]*)$" (symbol->string functor)))
+	 (when (and enable-checks-for-parse-functor-description?
+		    (not name+arity))
+	   (error "Functor name ~a is not of the form name/arity." functor))
+	 (if name
+	     (when (and enable-checks-for-parse-functor-description?
+			(not equals? name (second name+arity)))
+	       (error "Functor name ~a and name ~a do not match."
+		      functor name))
+	     (set! name (first name+arity)))
+	 (define functor-arity (string->number (third name+arity)))
+	 (unless functor-arity
+	   (error "Functor arity ~a of ~a is not a number."
+		  (second name+arity) functor))
+	 (if arity
+	     (when (and enable-checks-for-parse-functor-description?
+			(not (= arity functor-arity)))
+	       (error "Functor arity ~a and explicit arity ~a do not match."
+		      functor-arity arity))
+	     (set! arity functor-arity)))
+	(else
+	 (error "Neither name + arity nor functor were specified.")))
+  (values functor name arity))
+
 (defmethod make ((c (singleton <relation>)) &rest initargs)
-  (let* ((name (getarg initargs :name))
-	 (arity (getarg initargs :arity))
-	 (func (name+arity->functor name arity))
-	 (rel (hash-ref all-relations func #f)))
-    (if rel
-	(let ((new-clauses (getarg initargs :clauses)))
-	  (unless (null? new-clauses)
-	    (setf! (clauses rel) (append (clauses rel) new-clauses)))
-	  rel)
-	(let* ((rel (call-next-method)))
-	  (setf! (functor rel) func)
-	  (hash-set! all-relations func rel)
-	  rel))))
+  (define func (getarg initargs :functor #f))
+  (define name (getarg initargs :name #f))
+  (define arity (getarg initargs :arity #f))
+  (set!-values (func name arity)
+	       (parse-functor-description func name arity))
+
+  (define rel (hash-ref all-relations func #f))
+  (if rel
+      (let ((new-clauses (getarg initargs :clauses '())))
+	(unless (null? new-clauses)
+	  (setf! (clauses rel) (append (clauses rel) new-clauses)))
+	rel)
+      (let* ((rel (call-next-method)))
+	(setf! (functor rel) func)
+	(hash-set! all-relations func rel)
+	rel)))
 
 (defclass <horn-clause> ()
   (functor :initializer (required-initarg :functor))
@@ -79,6 +147,12 @@
 
 (make-equals?-compare-class+slots <horn-clause>)
 
+
+(defmethod add-clause ((relation <relation>) (clause <horn-clause>))
+  (setf! (clauses relation)
+	 (append (clauses relation) (list clause))))
+
+
 (defclass <horn-fact> (<horn-clause>))
 
 (defclass <horn-rule> (<horn-clause>)
@@ -86,16 +160,47 @@
   :auto #t
   :autoaccessors :slot)
 
+(defgeneric variables (term))
+
+(defmethod variables ((term <horn-clause>))
+  (variables (head term)))
+
+(defmethod variables ((term <horn-rule>))
+  (set-union (variables (head term)) (variables (body term))))
+
+(defmethod variables ((term <pair>))
+  (set-union (variables (first term))
+	     (variables (rest term))))
+
+(defmethod variables ((term <null>))
+  (set))
+
+(defmethod variables ((term <symbol>))
+  (if (logic-variable-name? term)
+      (set term)
+      (set)))
+
 (define-syntax :-
   (syntax-rules ()
-    ((:- (functor arg ...))
-     (make <horn-fact>
-       :name 'functor :arity (length '(arg ...)) :head '(functor arg ...)))
-    ((:- (functor arg ...) exp ...)
-     (make <horn-rule>
-       :name 'functor :arity (length '(arg ...)) :head '(functor arg ...)
-       :body '(exp ...)))))
-
+    ((:- (name arg ...))
+     (let* ((arity (length '(arg ...)))
+	    (functor (name+arity->functor 'name arity))
+	    (relation (make <relation> :name 'name :arity arity))
+	    (clause (make <horn-fact>
+		     :functor functor
+		     :head (list functor 'arg ...))))
+       (add-clause relation clause)
+       clause))
+    ((:- (name arg ...) exp ...)
+     (let* ((arity (length '(arg ...)))
+	    (functor (name+arity->functor 'name arity))
+	    (relation (make <relation> :name 'name :arity arity))
+	    (clause (make <horn-rule>
+		     :functor functor
+		     :head (list functor 'arg ...)
+		     :body (predicate-names->functors '(exp ...)))))
+       (add-clause relation clause)
+       clause))))
 
 (defclass <logic-variable> ()
   name

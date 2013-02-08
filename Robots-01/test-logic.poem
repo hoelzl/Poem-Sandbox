@@ -1,62 +1,145 @@
 #lang poem
 
 (require rackunit)
+(require rackunit/text-ui)
 (require "logic.poem")
 
-(test-begin
- (check-true (logic-variable-name? '?x))
- (check-false (logic-variable-name? 'x)))
+(define-test-suite relations-suite
 
-(test-begin
- (check equal? (get-binding '?x '((?x . 1) (?y . 2) (?z . 3))) '(?x . 1))
- (check equal? (get-binding '?y '((?x . 1) (?y . 2) (?z . 3))) '(?y . 2))
- (check equal? (get-binding '?z '((?x . 1) (?y . 2) (?z . 3))) '(?z . 3))
- (check eq? (get-binding '?a '((?x . 1) (?y . 2) (?z . 3))) #f))
+  (test-case
+   "name+arity->functor"
+   (check-equal? (name+arity->functor 'foo 2) 'foo/2))
 
-(test-begin
- (check eqv? (binding-val '(?x . y)) 'y))
+  (test-case
+   "predicate-names->functors"
+   (check-equal? (predicate-names->functors '?x) '?x)
+   (check-equal? (predicate-names->functors '(foo ?x ?y)) '(foo/2 ?x ?y))
+   (check-equal? (predicate-names->functors '(bar)) '(bar/0))
+   (check-equal? (predicate-names->functors '(foo (bar ?x) (baz ?x ?y)))
+		 '(foo/2 (bar/1 ?x) (baz/2 ?x ?y)))
+   (check-equal? (predicate-names->functors '((foo ?x))) '((foo/1 ?x))))
 
-(test-begin
- (check equal? (lookup '?x '((?x . 1) (?y . 2) (?z . 3))) 1)
- (check equal? (lookup '?y '((?x . 1) (?y . 2) (?z . 3))) 2)
- (check equal? (lookup '?z '((?x . 1) (?y . 2) (?z . 3))) 3))
+  (test-case
+   "make <relation> 1"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-equal? (name f/2-rel) 'f)
+   (check-equal? (arity f/2-rel) 2)
+   (check-equal? (functor f/2-rel) 'f/2)
+   (check-equal? (clauses f/2-rel) '()))
 
-(test-begin
- (check equal? (extend-bindings '?x 'y '()) '((?x . y)))
- (check equal? (extend-bindings '?x 'y '((?a . b)))
-	'((?x . y)  (?a . b))))
+  (test-case
+   "make <relation> 2"
+   (clear-all-relations)
+   (let ((clause (make <horn-fact> :functor 'f/2 :head '(f/2 ?x ?y))))
+     (define f/2-rel (make <relation>
+		       :name 'f :arity 2
+		       :clauses (list clause)))
+     (check-equal? (name f/2-rel) 'f)
+     (check-equal? (arity f/2-rel) 2)
+     (check-equal? (functor f/2-rel) 'f/2)
+     (check-equal? (clauses f/2-rel) (list clause))))
 
-(test-begin
- (check equal? (unify-variable '?x '?x '((?x . ?y))) '((?x . ?y)))
- (check equal? (unify-variable '?y '?y '((?x . ?y))) '((?x . ?y)))
- (check equal? (unify-variable '?z '?z '((?x . ?y))) '((?x . ?y)))
- (check equal? (unify-variable '?x '?z '((?x . ?y))) '((?y . ?z) (?x . ?y)))
- (check equal? (unify-variable '?x '?y '((?x . ?y))) '((?x . ?y)))
- (check equal? (unify-variable '?y '?x '((?x . ?y))) '((?x . ?y))))
+  (test-case
+   ":- 1"
+   (clear-all-relations)
+   (let ((clause (:- (f ?x ?y))))
+     (check instance-of? clause <horn-fact>)
+     (check-equal? (functor clause) 'f/2)
+     (check-equal? (head clause) '(f/2 ?x ?y))
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
+  
+  (test-case
+   ":- 2"
+   (clear-all-relations)
+   (let ((clause (:- (f ?x ?y) (g ?x ?y))))
+     (check instance-of? clause <horn-rule>)
+     (check-equal? (functor clause) 'f/2)
+     (check-equal? (head clause) '(f/2 ?x ?y))
+     (check-equal? (body clause) '((g/2 ?x ?y)))
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
 
-(test-begin
- (check equal? (unify '(+ ?x 1) '(+ 2 ?y)) '((?y . 1) (?x . 2)))
- (check equal? (unify '?x '?y) '((?x . ?y)))
- (check equal? (unify '(?x ?x) '(?y ?y)) '((?x . ?y)))
- (check equal? (unify '(?x ?x ?x) '(?y ?y ?y)) '((?x . ?y)))
- (check equal? (unify '(?x ?y) '(?y ?x)) '((?x . ?y))))
+  (test-case
+   "variables"
+   (clear-all-relations)
+   (let ((clause (:- (f ?w ?x ?y) (g ?x ?z) (h ?z ?y))))
+     (check set=? (variables '?x) (set '?x))
+     (check set=? (variables clause)
+	    (set '?w '?x '?y '?z)))))
 
-;;; TODO: Tests for occurs check.
 
-(test-begin
- (check equal? (subst-bindings '((?x . 1)) '?x) 1)
- (check equal? (subst-bindings '((?x . 1)) '?y) '?y)
- (check equal? (subst-bindings '((?x . 1)) '(a ?y ?x)) '(a ?y 1))
- (check eq? (subst-bindings '((?x . 1)) '?z) '?z)
- (let ((my-list '(a ?y ?z)))
-   (check eq? (subst-bindings '((?x . 1)) my-list) my-list)))
+(define-test-suite unification-suite
+  (test-case
+   "logic-variable-name"
+   (check-true (logic-variable-name? '?x))
+   (check-false (logic-variable-name? 'x)))
 
-(test-begin
- (check equal? (apply-unifier '(?x 1) '(f ?y)) '(f 1))
- (check equal? (apply-unifier '(?x 1) '(?y 1)) '(?y 1))
- (check-false (apply-unifier '(?x 1) '(?y 2)))
- (check-false (apply-unifier '(?x 1) '(?y 1 2)))
- (check-false (apply-unifier '(?x 1 2) '(?y 1)))
- (check-false (apply-unifier '?x '(f ?x))))
+  (test-case
+   "get-binding"
+   (check equal? (get-binding '?x '((?x . 1) (?y . 2) (?z . 3))) '(?x . 1))
+   (check equal? (get-binding '?y '((?x . 1) (?y . 2) (?z . 3))) '(?y . 2))
+   (check equal? (get-binding '?z '((?x . 1) (?y . 2) (?z . 3))) '(?z . 3))
+   (check eq? (get-binding '?a '((?x . 1) (?y . 2) (?z . 3))) #f))
 
-(printf "\nPerformed all tests\n")
+  (test-case
+   "binding-val"
+   (check eqv? (binding-val '(?x . y)) 'y))
+
+  (test-case
+   "lookup"
+   (check equal? (lookup '?x '((?x . 1) (?y . 2) (?z . 3))) 1)
+   (check equal? (lookup '?y '((?x . 1) (?y . 2) (?z . 3))) 2)
+   (check equal? (lookup '?z '((?x . 1) (?y . 2) (?z . 3))) 3))
+
+  (test-case
+   "extend-bindings"
+   (check equal? (extend-bindings '?x 'y '()) '((?x . y)))
+   (check equal? (extend-bindings '?x 'y '((?a . b)))
+	  '((?x . y)  (?a . b))))
+
+  (test-case
+   "unify-variable"
+   (check equal? (unify-variable '?x '?x '((?x . ?y))) '((?x . ?y)))
+   (check equal? (unify-variable '?y '?y '((?x . ?y))) '((?x . ?y)))
+   (check equal? (unify-variable '?z '?z '((?x . ?y))) '((?x . ?y)))
+   (check equal? (unify-variable '?x '?z '((?x . ?y))) '((?y . ?z) (?x . ?y)))
+   (check equal? (unify-variable '?x '?y '((?x . ?y))) '((?x . ?y)))
+   (check equal? (unify-variable '?y '?x '((?x . ?y))) '((?x . ?y))))
+
+  (test-case
+   "unify"
+   (check equal? (unify '(+ ?x 1) '(+ 2 ?y)) '((?y . 1) (?x . 2)))
+   (check equal? (unify '?x '?y) '((?x . ?y)))
+   (check equal? (unify '(?x ?x) '(?y ?y)) '((?x . ?y)))
+   (check equal? (unify '(?x ?x ?x) '(?y ?y ?y)) '((?x . ?y)))
+   (check equal? (unify '(?x ?y) '(?y ?x)) '((?x . ?y))))
+
+  ;; TODO: Tests for occurs check.
+
+  (test-case
+   "subst-bindings"
+   (check equal? (subst-bindings '((?x . 1)) '?x) 1)
+   (check equal? (subst-bindings '((?x . 1)) '?y) '?y)
+   (check equal? (subst-bindings '((?x . 1)) '(a ?y ?x)) '(a ?y 1))
+   (check eq? (subst-bindings '((?x . 1)) '?z) '?z)
+   (let ((my-list '(a ?y ?z)))
+     (check eq? (subst-bindings '((?x . 1)) my-list) my-list)))
+
+  (test-case
+   "apply-unifier"
+   (check equal? (apply-unifier '(?x 1) '(f ?y)) '(f 1))
+   (check equal? (apply-unifier '(?x 1) '(?y 1)) '(?y 1))
+   (check-false (apply-unifier '(?x 1) '(?y 2)))
+   (check-false (apply-unifier '(?x 1) '(?y 1 2)))
+   (check-false (apply-unifier '(?x 1 2) '(?y 1)))
+   (check-false (apply-unifier '?x '(f ?x)))))
+
+
+(define-test-suite logic-suite
+  unification-suite
+  relations-suite)
+
+;;; TODO: delete this when the main implementation work is done and
+;;; the test suite is integrated into the Poem tests.
+(printf "\nRunning tests for logic.poem\n")
+(run-tests logic-suite)
