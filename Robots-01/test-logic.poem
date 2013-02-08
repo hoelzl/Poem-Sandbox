@@ -21,7 +21,6 @@
 
   (test-case
    "parse-functor-description 1"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Functor name is not a symbol: \"foo\"$"
 	      (thunk (parse-functor-description "foo" "bar" "2")))
    (check-exn #rx"^Relation name is not a symbol: \"bar\"$"
@@ -35,7 +34,6 @@
 
   (test-case
    "parse-functor-description 2"
-   (enable-checks-for-parse-functor-description? #t)
    (define-values (functor name arity)
      (parse-functor-description 'foo/2 'foo 2))
    (check-equal? functor 'foo/2)
@@ -44,7 +42,6 @@
 
   (test-case
    "parse-functor-description 3"
-   (enable-checks-for-parse-functor-description? #t)
    (define-values (functor name arity)
      (parse-functor-description #f 'foo 2))
    (check-equal? functor 'foo/2)
@@ -53,7 +50,6 @@
 
   (test-case
    "parse-functor-description 4"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Functor name is not of the form name/arity: foo$"
 	      (thunk (parse-functor-description 'foo #f #f)))
    (check-exn #rx"^Functor name is not of the form name/arity: foo/bar$"
@@ -63,7 +59,6 @@
 
   (test-case
    "parse-functor-description 5"
-   (enable-checks-for-parse-functor-description? #t)
    (define-values (functor name arity)
      (parse-functor-description 'foo/2 #f #f))
    (check-equal? functor 'foo/2)
@@ -72,13 +67,11 @@
 
   (test-case
    "parse-functor-description 6"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Functor name and relation name do not match: foo/2 bar$"
 	      (thunk (parse-functor-description 'foo/2 'bar #f))))
 
   (test-case
    "parse-functor-description 7"
-   (enable-checks-for-parse-functor-description? #t)
    (define-values (functor name arity)
      (parse-functor-description 'foo/2 'foo #f))
    (check-equal? functor 'foo/2)
@@ -87,7 +80,6 @@
 
   (test-case
    "parse-functor-description 8"
-   (enable-checks-for-parse-functor-description? #t)
    (define-values (functor name arity)
      (parse-functor-description 'foo/2 #f 2))
    (check-equal? functor 'foo/2)
@@ -96,19 +88,16 @@
 
   (test-case
    "parse-functor-description 9"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Functor arity and explicit arity do not match: 2 3$"
 	      (thunk (parse-functor-description 'foo/2 #f 3))))
 
   (test-case
    "parse-functor-description 10"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Neither name \\+ arity nor functor were specified.$"
 	      (thunk (parse-functor-description #f 'foo #f))))
 
   (test-case
    "parse-functor-description 11"
-   (enable-checks-for-parse-functor-description? #t)
    (check-exn #rx"^Neither name \\+ arity nor functor were specified.$"
 	      (thunk (parse-functor-description #f #f 3))))
 

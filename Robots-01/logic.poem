@@ -12,7 +12,6 @@
 
 	 name+arity->functor
 	 predicate-names->functors
-	 enable-checks-for-parse-functor-description?
 	 functor-regexp
 	 parse-functor-description
 
@@ -82,44 +81,44 @@
       (hash-set! all-relations name new-relation)))
 
 
-(define enable-checks-for-parse-functor-description? (make-parameter #t))
 (define functor-regexp #rx"^(.+)/([1-9][0-9]*)$")
 
+(define (parse-functor-name functor)
+  (define name+arity (regexp-match functor-regexp (symbol->string functor)))
+  (unless name+arity
+    (error "Functor name is not of the form name/arity:" functor))
+  (define functor-name (string->symbol (second name+arity)))
+  (define functor-arity (string->number (third name+arity)))
+  ;; This error should never be triggered unless the functor-regexp is
+  ;; messed up.
+  (unless functor-arity
+    (error "Functor arity is not a number:" functor))
+  (values functor-name functor-arity))
+
 (define (parse-functor-description functor name arity)
-  (when enable-checks-for-parse-functor-description?
-    (when (and functor (not (symbol? functor)))
-      (error "Functor name is not a symbol:" functor))
-    (when (and name (not (symbol? name)))
-      (error "Relation name is not a symbol:" name))
-    (when (and arity (or (not (integer? arity)) (arity . < . 0)))
-      (error "Arity is not a non-negative integer:" arity)))
+  (when (and functor (not (symbol? functor)))
+    (error "Functor name is not a symbol:" functor))
+  (when (and name (not (symbol? name)))
+    (error "Relation name is not a symbol:" name))
+  (when (and arity (or (not (integer? arity)) (arity . < . 0)))
+    (error "Arity is not a non-negative integer:" arity))
   (cond ((and name arity)
 	 (cond (functor
-		(when (and enable-checks-for-parse-functor-description? 
-			   (not (equal? functor (name+arity->functor name arity))))
+		(unless (equal? functor (name+arity->functor name arity))
 		  (error "Name and arity do not match functor:"
 			 name arity functor)))
 	       (else
 		(set! functor (name+arity->functor name arity)))))
 	(functor
-	 (define name+arity (regexp-match functor-regexp (symbol->string functor)))
-	 (when (and enable-checks-for-parse-functor-description?
-		    (not name+arity))
-	   (error "Functor name is not of the form name/arity:" functor))
+	 (define-values (functor-name functor-arity)
+	   (parse-functor-name functor))
 	 (if name
-	     (when (and enable-checks-for-parse-functor-description?
-			(not (equals? (symbol->string name) (second name+arity))))
+	     (unless (equals? name functor-name)
 	       (error "Functor name and relation name do not match:"
 		      functor name))
-	     (set! name (string->symbol (second name+arity))))
-	 (define functor-arity (string->number (third name+arity)))
-	 ;;; This error should never be triggered unless the
-	 ;;; functor-regexp is messed up.
-	 (unless functor-arity
-	   (error "Functor arity is not a number:" functor))
+	     (set! name functor-name))
 	 (if arity
-	     (when (and enable-checks-for-parse-functor-description?
-			(not (= arity functor-arity)))
+	     (unless (= arity functor-arity)
 	       (error "Functor arity and explicit arity do not match:"
 		      functor-arity arity))
 	     (set! arity functor-arity)))
