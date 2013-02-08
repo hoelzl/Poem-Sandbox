@@ -2,6 +2,7 @@
 
 (provide required-argument
 	 required-initarg
+	 assert
 	 contains?
 	 reuse-cons)
 
@@ -13,6 +14,15 @@
   (thunk
    (error (format "The required initarg ~a is missing." name))))
 
+(define-syntax assert
+  (syntax-rules ()
+    ((_ pred)
+     (unless pred
+       (error (format "Assertion ~v failed!" 'pred))))
+    ((_ pred format-string arg ...)
+     (unless pred
+       (error (format (string-append "Assertion ~v failed; " format-string)
+		      'pred arg ...))))))
 
 ;;; TODO: Add missing data structures to contains?.
 (define (contains? elt tree) 

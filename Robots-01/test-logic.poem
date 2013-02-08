@@ -20,6 +20,31 @@
    (check-equal? (predicate-names->functors '((foo ?x))) '((foo/1 ?x))))
 
   (test-case
+   "parse-functor-name 1"
+   (check-exn #rx"^Functor name is not a symbol: \"foo/2\""
+	      (thunk (parse-functor-name "foo/2")))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo"
+	      (thunk (parse-functor-name 'foo)))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo/"
+	      (thunk (parse-functor-name 'foo/)))
+   (check-exn #rx"^Functor name is not of the form name/arity: /2"
+	      (thunk (parse-functor-name '/2)))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo/bar"
+	      (thunk (parse-functor-name 'foo/bar))))
+
+  (test-case
+   "parse-functor-name 2"
+   (define-values (name arity) (parse-functor-name 'foo/2))
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-name 3"
+   (define-values (name arity) (parse-functor-name '//2))
+   (check-equal? name '/)
+   (check-equal? arity 2))
+
+  (test-case
    "parse-functor-description 1"
    (check-exn #rx"^Functor name is not a symbol: \"foo\"$"
 	      (thunk (parse-functor-description "foo" "bar" "2")))
@@ -114,13 +139,31 @@
    "make <relation> 2"
    (clear-all-relations)
    (let ((clause (make <horn-fact> :functor 'f/2 :head '(f/2 ?x ?y))))
-     (define f/2-rel (make <relation>
-		       :name 'f :arity 2
-		       :clauses (list clause)))
-     (check-equal? (name f/2-rel) 'f)
-     (check-equal? (arity f/2-rel) 2)
-     (check-equal? (functor f/2-rel) 'f/2)
-     (check-equal? (clauses f/2-rel) (list clause))))
+     (check-exn #rx"Adding initial clauses currently not supported;"
+		(thunk (make <relation>
+			 :name 'f :arity 2
+			 :clauses (list clause))))))
+
+
+  (test-case
+   "find-relation 1"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-equal? (find-relation 'f 2) f/2-rel)
+   (check-equal? (find-relation 'f/2) f/2-rel))
+
+  (test-case
+   "find-relation 2"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-false (find-relation 'f 1))
+   (check-false (find-relation 'f/1)))
+
+  (test-case
+   "functor-and-term-compatible?"
+   (check-true (functor-and-term-compatible? 'foo/2 '(foo/2 ?x ?y)))
+   (check-false (functor-and-term-compatible? 'foo/2 '(foo/3 ?x ?y ?z)))
+   (check-false (functor-and-term-compatible? 'foo/2 'foo/2)))
 
   (test-case
    ":- 1"
