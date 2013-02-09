@@ -40,7 +40,10 @@
 (define functor-regexp #rx"^(.+)/([1-9][0-9]*)$")
 
 (define (name+arity->functor name arity)
-  (define functor-name+arity (regexp-match functor-regexp (symbol->string name)))
+  (unless (symbol? name)
+    (error "Name is not a symbol:" functor))
+  (define functor-name+arity
+    (regexp-match functor-regexp (symbol->string name)))
   (if functor-name+arity
       (let ((functor-arity (string->number (third functor-name+arity))))
 	(if (equal? arity functor-arity)
@@ -59,10 +62,11 @@
       expression))
 
 
-(defclass <logic-variable> ()
-  name
-  :autoaccessors :slot
-  :auto #t)
+(defstruct <logic-variable> ()
+  name)
+
+(defmethod name ((var <logic-variable>))
+  (logic-variable-name var))
 
 (define (logic-variable-name? x)
   (and (symbol? x)
@@ -140,15 +144,31 @@
 ;;; TODO: <relation> is not a particularly good name for the concept
 ;;; represented by this class, since relations can (and should) be
 ;;; more general than the "Prolog-like" relations represented here.
-;;; --tc
-(defclass <relation> ()
-  (name :type <symbol>)
-  (arity :type <integer>)
-  (functor :type <symbol>)
-  (clauses :type <list> :initvalue '())
-  :printer #t
-  :auto #t
-  :autoaccessors :slot)
+;;; --tc 
+
+;;; TODO: Cannot name this class <relation> since otherwise `relation'
+;;; will be defined as syntax.  Hence this ugly workaround.  We really
+;;; need to improve the implementation of the object system and
+;;; integrate it better with the base language.
+(defstruct <%relation> ()
+  name
+  arity
+  functor
+  clauses)
+
+(define <relation> <%relation>)
+
+(defmethod name ((rel <relation>))
+  (%relation-name rel))
+
+(defmethod arity ((rel <relation>))
+  (%relation-arity rel))
+
+(defmethod functor ((rel <relation>))
+  (%relation-functor rel))
+
+(defmethod clauses ((rel <relation>))
+  (%relation-clauses rel))
 
 (define all-relations (make-hasheq))
 
@@ -181,42 +201,52 @@
   (define rel (hash-ref all-relations functor #f))
   (or rel
       (let* ((rel (apply call-next-method c
-			 :functor functor :name name :arity arity
+			 :functor functor :name name :arity arity :clauses '()
 			 initargs)))
 	(hash-set! all-relations functor rel)
 	rel)))
 
-
 (define (functor-and-term-compatible? functor term)
   (and (pair? term) (eq? functor (first term))))
 
-(defclass <horn-clause> ()
-  (functor)
-  (head :initializer (required-initarg :head))
-  (relation)
-  (variables)
-  :auto #t
-  :autoaccessors :slot)
+(defstruct <horn-clause> ()
+  functor
+  head
+  relation
+  variables)
+
+(defmethod functor ((clause <horn-clause>))
+  (horn-clause-functor clause))
+
+(defmethod head ((clause <horn-clause>))
+  (horn-clause-head clause))
+
+(defmethod relation ((clause <horn-clause>))
+  (horn-clause-relation clause))
+
+(defmethod variables ((clause <horn-clause>))
+  (horn-clause-variables clause))
 
 (make-equals?-compare-class+slots <horn-clause>)
 
 (define (clause-compatible-with-relation? clause relation)
-  (equal? (functor clause) (functor relation)))
+  (equal? (horn-clause-functor clause) (%relation-functor relation)))
 
 (defmethod add-clause ((relation <relation>) (clause <horn-clause>))
   (assert (clause-compatible-with-relation? clause relation))
-  (setf! (clauses relation)
-	 (append (clauses relation) (list clause))))
+  (set-%relation-clauses!
+   relation (append (%relation-clauses relation) (list clause))))
 
-(defclass <horn-fact> (<horn-clause>))
+(defstruct <horn-fact> (<horn-clause>))
 
 (defmethod body ((clause <horn-fact>))
   #f)
 
-(defclass <horn-rule> (<horn-clause>)
-  (body :initializer (required-initarg :body))
-  :auto #t
-  :autoaccessors :slot)
+(defstruct <horn-rule> (<horn-clause>)
+  body)
+
+(defmethod body ((clause <horn-rule>))
+  (horn-rule-body clause))
 
 
 (defmethod make ((class (singleton <horn-clause>))
