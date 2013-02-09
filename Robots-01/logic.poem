@@ -3,7 +3,13 @@
 (require "utils.poem")
 (require racket/set)
 
-(provide <relation>
+(provide <logic-variable>
+	 name
+	 make-logic-variable
+	 logic-variable-name?
+	 introduce-logic-variables
+
+	 <relation>
 	 name arity functor clauses
 	 add-clause variables
 	 
@@ -25,32 +31,11 @@
 
 	 :-
 
-	 <logic-variable>
-	 name value
-	 make-logic-variable
-	 logic-variable-name?
 	 get-binding binding-val lookup extend-bindings
 	 unify unify-variable
 	 perform-occurs-check? occurs-check?
 	 subst-bindings
 	 apply-unifier)
-
-;;; TODO: <relation> is not a particularly good name for the concept
-;;; represented by this class, since relations can (and should) be
-;;; more general than the "Prolog-like" relations represented here.
-;;; --tc
-(defclass <relation> ()
-  (name :type <symbol>)
-  (arity :type <integer>)
-  (functor :type <symbol>)
-  (clauses :type <list> :initvalue '())
-  :printer #t
-  :auto #t
-  :autoaccessors :slot)
-
-(define all-relations (make-hasheq))
-
-(define (clear-all-relations) (setf! all-relations (make-hasheq)))
 
 (define functor-regexp #rx"^(.+)/([1-9][0-9]*)$")
 
@@ -73,23 +58,36 @@
 	    (map predicate-names->functors expression)))
       expression))
 
-(define (remove-relation! name (arity #f))
-  (if arity
-      (let ((functor (name+arity->functor name arity)))
-	(hash-remove! all-relations functor))
-      (hash-remove! all-relations name)))
 
-(define (find-relation name (arity #f))
-  (if arity
-      (let ((functor (name+arity->functor name arity)))
-	(hash-ref all-relations functor #f))
-      (hash-ref all-relations name #f)))
+(defclass <logic-variable> ()
+  name
+  :autoaccessors :slot
+  :auto #t)
 
-(define (set-find-relation! name arity new-relation)
-  (if arity
-      (let ((functor (name+arity->functor name arity)))
-	(hash-set! all-relations functor new-relation))
-      (hash-set! all-relations name new-relation)))
+(define (logic-variable-name? x)
+  (and (symbol? x)
+       (eq? (string-ref (symbol->string x) 0) #\?)))
+
+;;; TODO: Add other datatypes
+(define (introduce-logic-variables term (bindings '()))
+  (cond ((pair? term)
+	 (define-values (result-car bindings-1)
+	   (introduce-logic-variables (car term) bindings))
+	 (define-values (result-cdr result-bindings)
+	   (introduce-logic-variables (cdr term) bindings-1))
+	 (values (reuse-cons result-car result-cdr term)
+		 result-bindings))
+	((null? term)
+	 (values '() bindings))
+	((logic-variable-name? term)
+	 (define binding (assoc term bindings))
+	 (if binding
+	     (values (cdr binding) bindings)
+	     (let* ((new-var (make <logic-variable> :name term))
+		    (new-bindings (list* (cons term new-var) bindings)))
+	       (values new-var new-bindings))))
+	(else
+	 (values term bindings))))
 
 
 (define (parse-functor-name functor)
@@ -138,6 +136,42 @@
   (values functor name arity))
 
 
+
+;;; TODO: <relation> is not a particularly good name for the concept
+;;; represented by this class, since relations can (and should) be
+;;; more general than the "Prolog-like" relations represented here.
+;;; --tc
+(defclass <relation> ()
+  (name :type <symbol>)
+  (arity :type <integer>)
+  (functor :type <symbol>)
+  (clauses :type <list> :initvalue '())
+  :printer #t
+  :auto #t
+  :autoaccessors :slot)
+
+(define all-relations (make-hasheq))
+
+(define (clear-all-relations) (setf! all-relations (make-hasheq)))
+
+(define (remove-relation! name (arity #f))
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-remove! all-relations functor))
+      (hash-remove! all-relations name)))
+
+(define (find-relation name (arity #f))
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-ref all-relations functor #f))
+      (hash-ref all-relations name #f)))
+
+(define (set-find-relation! name arity new-relation)
+  (if arity
+      (let ((functor (name+arity->functor name arity)))
+	(hash-set! all-relations functor new-relation))
+      (hash-set! all-relations name new-relation)))
+
 (defmethod make ((c (singleton <relation>))
 		 &key functor name arity &rest initargs)
   (set!-values (functor name arity)
@@ -160,6 +194,7 @@
   (functor)
   (head :initializer (required-initarg :head))
   (relation)
+  (variables)
   :auto #t
   :autoaccessors :slot)
 
@@ -175,6 +210,9 @@
 
 (defclass <horn-fact> (<horn-clause>))
 
+(defmethod body ((clause <horn-fact>))
+  #f)
+
 (defclass <horn-rule> (<horn-clause>)
   (body :initializer (required-initarg :body))
   :auto #t
@@ -186,8 +224,10 @@
   (define real-class (if (and body (not (empty? body)))
 			 <horn-rule>
 			 <horn-fact>))
-  (define new-head (predicate-names->functors head))
-  (define new-body (predicate-names->functors body))
+  (define-values (new-head bindings-1)
+    (introduce-logic-variables (predicate-names->functors head)))
+  (define-values (new-body bindings-2)
+    (introduce-logic-variables (predicate-names->functors body) bindings-1))
   (define functor (first new-head))
   (define relation (find-relation functor))
   (define result
@@ -208,40 +248,30 @@
 	 :body (predicate-names->functors '(exp ...))
 	 :relation relation)))))
 
-(defgeneric variables (term))
 
-(defmethod variables ((term <horn-clause>))
-  (variables (head term)))
+(define (subst-bindings bindings x)
+  (define (subst-in-binding-val binding)
+    (subst-bindings bindings (binding-val binding)))
+  (cond ((not bindings) #f)
+	((null? bindings) x)
+	((and (logic-variable? x) (get-binding x bindings))
+	 => subst-in-binding-val)
+	((not (pair? x)) x)
+	(else
+	 (reuse-cons (subst-bindings bindings (car x))
+		     (subst-bindings bindings (cdr x))
+		     x))))
 
-(defmethod variables ((term <horn-rule>))
-  (set-union (variables (head term)) (variables (body term))))
-
-(defmethod variables ((term <pair>))
-  (set-union (variables (first term))
-	     (variables (rest term))))
-
-(defmethod variables ((term <null>))
-  (set))
-
-(defmethod variables ((term <symbol>))
-  (if (logic-variable-name? term)
-      (set term)
-      (set)))
-
-
-(defclass <logic-variable> ()
-  name
-  value
-  :autoaccessors :slot
-  :auto #t)
-
+(define (rename-variables clause bindings)
+  (make <horn-clause>
+    :functor (functor clause)
+    :head (subst-bindings bindings (head clause))
+    :body (subst-bindings bindings (body clause))
+    :relation (relation clause)
+    :variables (map cdr bindings)))
 
 ;;; A simple unification algorithm, following Norvig's implementation
 ;;; in PAIP.
-
-(define (logic-variable-name? x)
-  (and (symbol? x)
-       (eq? (string-ref (symbol->string x) 0) #\?)))
 
 (define (get-binding var bindings)
   (assoc var bindings))
@@ -293,19 +323,6 @@
 	((pair? x) (or (occurs-check? var (first x) bindings)
 		       (occurs-check? var (rest x) bindings)))
 	(else #f)))
-
-(define (subst-bindings bindings x)
-  (define (subst-binding binding)
-    (subst-bindings bindings (binding-val binding)))
-  (cond ((not bindings) #f)
-	((null? bindings) x)
-	((and (logic-variable-name? x) (get-binding x bindings))
-	 => subst-binding)
-	((not (pair? x)) x)
-	(else
-	 (reuse-cons (subst-bindings bindings (car x))
-		     (subst-bindings bindings (cdr x))
-		     x))))
 
 (define (apply-unifier x y)
   (subst-bindings (unify x y) x))

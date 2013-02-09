@@ -4,11 +4,18 @@
 (require rackunit/text-ui)
 (require "logic.poem")
 
+(define-simple-check (check-logical-variable var var-name)
+  (check-not-false (instance-of? var  <logic-variable>))
+  (check-equal? (name var) var-name))
+
 (define-test-suite relations-suite
 
   (test-case
    "name+arity->functor"
-   (check-equal? (name+arity->functor 'foo 2) 'foo/2))
+   (check-equal? (name+arity->functor 'foo 2) 'foo/2)
+   (check-equal? (name+arity->functor 'foo/2 2) 'foo/2)
+   (check-equal? (name+arity->functor 'foo/1 2) 'foo/1/2)
+   (check-equal? (name+arity->functor '/ 2) '//2))
 
   (test-case
    "predicate-names->functors"
@@ -18,6 +25,21 @@
    (check-equal? (predicate-names->functors '(foo (bar ?x) (baz ?x ?y)))
 		 '(foo/2 (bar/1 ?x) (baz/2 ?x ?y)))
    (check-equal? (predicate-names->functors '((foo ?x))) '((foo/1 ?x))))
+
+  (test-case
+   "logic-variable-name"
+   (check-true (logic-variable-name? '?x))
+   (check-false (logic-variable-name? 'x)))
+
+  (test-case
+   "introduce-logic-variables 1"
+   (define-values (term subst) (introduce-logic-variables '(foo ?x 1 ?y)))
+   (check-pred pair? term)
+   (check-equal? (length term) 4)
+   (check-equal? (first term) 'foo)
+   (check-logical-variable (second term) '?x)
+   (check-equal? (third term) 1)
+   (check-logical-variable (fourth term) '?y))
 
   (test-case
    "parse-functor-name 1"
@@ -171,7 +193,11 @@
    (let ((clause (:- (f ?x ?y))))
      (check instance-of? clause <horn-fact>)
      (check-equal? (functor clause) 'f/2)
-     (check-equal? (head clause) '(f/2 ?x ?y))
+     (define hd (head clause))
+     (check-equal? (first hd) 'f/2)
+     (check-equal? (length hd) 3)
+     (check-logical-variable (second hd) '?x)
+     (check-logical-variable (third hd) '?y)
      (check-equal? (clauses (find-relation 'f 2)) (list clause))))
   
   (test-case
@@ -180,25 +206,24 @@
    (let ((clause (:- (f ?x ?y) (g ?x ?y))))
      (check instance-of? clause <horn-rule>)
      (check-equal? (functor clause) 'f/2)
-     (check-equal? (head clause) '(f/2 ?x ?y))
-     (check-equal? (body clause) '((g/2 ?x ?y)))
-     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
-
-  (test-case
-   "variables"
-   (clear-all-relations)
-   (let ((clause (:- (f ?w ?x ?y) (g ?x ?z) (h ?z ?y))))
-     (check set=? (variables '?x) (set '?x))
-     (check set=? (variables clause)
-	    (set '?w '?x '?y '?z)))))
+     (define hd (head clause))
+     (check-equal? (first hd) 'f/2)
+     (check-equal? (length hd) 3)
+     (check-logical-variable (second hd) '?x)
+     (check-logical-variable (third hd) '?y)
+     (define bd (body clause))
+     (check-equal? (length bd) 1)
+     (define bc (first bd))
+     (check-equal? (first bc) 'g/2)
+     (check-equal? (length bc) 3)
+     (check-logical-variable (second bc) '?x)
+     (check-logical-variable (third bc) '?y)
+     (check-eq? (second hd) (second bc))
+     (check-eq? (third hd) (third bc))
+     (check-equal? (clauses (find-relation 'f 2)) (list clause)))))
 
 
 (define-test-suite unification-suite
-  (test-case
-   "logic-variable-name"
-   (check-true (logic-variable-name? '?x))
-   (check-false (logic-variable-name? 'x)))
-
   (test-case
    "get-binding"
    (check equal? (get-binding '?x '((?x . 1) (?y . 2) (?z . 3))) '(?x . 1))
