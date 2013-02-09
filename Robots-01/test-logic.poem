@@ -9,16 +9,16 @@
   (check-equal? (name var) var-name))
 
 (define-simple-check (check-renamed-variables lhs rhs)
-  (cond ((logic-variable? lhs)
+  (cond [(logic-variable? lhs)
 	 (check-pred logic-variable? rhs "Not a logic variable")
 	 (check-not-eq? lhs rhs "Logic variables are equal")
-	 (check-eq? (name lhs) (name rhs) "Names differ"))
-	((pair? lhs)
+	 (check-eq? (name lhs) (name rhs) "Names differ")]
+	[(pair? lhs)
 	 (check-pred pair? rhs "Not a pair")
 	 (check-renamed-variables (car lhs) (car rhs))
-	 (check-renamed-variables (cdr lhs) (cdr rhs)))
-	(else
-	 (check-eq? lhs rhs "Not variables and not equal"))))
+	 (check-renamed-variables (cdr lhs) (cdr rhs))]
+	[else
+	 (check-eq? lhs rhs "Not variables and not equal")]))
 
 (define-test-suite relations-suite
 
@@ -172,7 +172,7 @@
   (test-case
    "make <relation> 2"
    (clear-all-relations)
-   (let ((clause (make <horn-fact> :functor 'f/2 :head '(f/2 ?x ?y))))
+   (let ([clause (make <horn-fact> :functor 'f/2 :head '(f/2 ?x ?y))])
      (check-exn #rx"Adding initial clauses currently not supported;"
 		(thunk (make <relation>
 			 :name 'f :arity 2
@@ -202,7 +202,7 @@
   (test-case
    ":- 1"
    (clear-all-relations)
-   (let ((clause (:- (f ?x ?y))))
+   (let ([clause (:- (f ?x ?y))])
      (check instance-of? clause <horn-fact>)
      (check-equal? (functor clause) 'f/2)
      (define hd (head clause))
@@ -215,7 +215,7 @@
   (test-case
    ":- 2"
    (clear-all-relations)
-   (let ((clause (:- (f ?x ?y) (g ?x ?y))))
+   (let ([clause (:- (f ?x ?y) (g ?x ?y))])
      (check instance-of? clause <horn-rule>)
      (check-equal? (functor clause) 'f/2)
      (define hd (head clause))
@@ -400,7 +400,7 @@
    (check equal? (subst-bindings y bindings) y)
    (check eq? (subst-bindings y  bindings) y)
    (check equal? (subst-bindings `(a ,y ,x) bindings) `(a ,y 1))
-   (let ((my-term `(a ,y 1)))
+   (let ([my-term `(a ,y 1)])
      (check eq? (subst-bindings my-term bindings) my-term)))
 
   (test-case
