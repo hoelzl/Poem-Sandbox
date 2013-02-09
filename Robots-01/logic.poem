@@ -310,7 +310,7 @@
 
 (define-syntax :-
   (syntax-rules ()
-    ((:- (name arg ...) exp ...)
+    [(:- (name arg ...) exp ...)
      (let* ([arity (length '(arg ...))]
 	    [functor (name+arity->functor 'name arity)]
 	    [relation (make <relation> :name 'name :arity arity)])
@@ -319,7 +319,7 @@
 	 :head (predicate-names->functors '(name arg ...))
 	 :body (predicate-names->functors '(exp ...))
 	 :relation relation
-	 :add-to-relation? #t)))))
+	 :add-to-relation? #t))]))
 
 
 ;;; Bindings and Standardizing Apart
@@ -351,7 +351,7 @@
 	[(not (pair? x)) x]))
 
 (define (fresh-variables-for clause)
-  (for/list ((var (in-set (variables clause))))
+  (for/list ([var (in-set (variables clause))])
     (cons var (make <logic-variable>
 		:name (logic-variable-name var)))))
 

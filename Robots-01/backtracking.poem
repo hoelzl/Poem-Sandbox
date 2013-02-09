@@ -234,7 +234,7 @@
 
 (define-syntax amb
   (syntax-rules ()
-    ((_ value ...)
+    [(_ value ...)
      (call-with-current-continuation
       (lambda (cont)
 	(debug-printf "amb: adding nodes\n")
@@ -248,7 +248,7 @@
 	(fail)
 	#;(error "Amb fell through?")
 	)
-      amb-tag))))
+      amb-tag)]))
 
 
 (define (amb-list lst)
@@ -271,8 +271,8 @@
 ;;; Should behave identical to amb
 (define-syntax amb*
   (syntax-rules ()
-    ((_ value ...)
-     (amb-list* (list (thunk value) ...)))))
+    [(_ value ...)
+     (amb-list* (list (thunk value) ...))]))
 
 
 ;;; Similar to amb-list, but does not expect thunks as arguments.
@@ -326,37 +326,37 @@
 
 (define-syntax collect
   (syntax-rules ()
-    ((_ (search-strategy) body ...)
-     (let ((result '()))
+    [(_ (search-strategy) body ...)
+     (let ([result '()])
        (define (process-result res)
-	 (let-values (((collect-it? continue? real-value)
-		       (collect-result (amb-search-strategy) res)))
+	 (let-values ([(collect-it? continue? real-value)
+		       (collect-result (amb-search-strategy) res)])
 	   (debug-printf "Result ~a, collect-it? ~a\n"
 			 res collect-it?)
 	   (when collect-it?
 	     (debug-printf "Collecting result ~a\n" res)
 	     (set! result (list* res result)))
-	   (cond (continue?
+	   (cond [continue?
 		  (debug-printf "Continuing\n")
 		  (call-with-continuation-prompt 
-		   fail amb-tag amb-handler))
-		 (else
-		  (abort/cc amb-abort-tag)))
+		   fail amb-tag amb-handler)]
+		 [else
+		  (abort/cc amb-abort-tag)])
 	   #;(error "Fell through process-result?")
 	   ))
        (define (amb-handler kind value)
 	 (case kind
-	   ((cont)
+	   [(cont)
 	    (debug-printf "In collect/cont 1: ~a\n" value)
-	    (let ((res (call-with-continuation-prompt 
-			value amb-tag amb-handler)))
-	      (process-result res)))
-	   ((deliver)
+	    (let ([res (call-with-continuation-prompt 
+			value amb-tag amb-handler)])
+	      (process-result res))]
+	   [(deliver)
 	    (debug-printf "In collect/deliver: ~a\n" value)
-	    (process-result value))
+	    (process-result value)]
 	   #;(else (error "Fell through amb-handler."))
 	   ))
-       (parameterize ((amb-search-strategy search-strategy))
+       (parameterize ([amb-search-strategy search-strategy])
 	 (call-with-continuation-prompt
 	  (thunk
 	   (call-with-continuation-prompt
@@ -376,9 +376,9 @@
 	      amb-tag)) amb-tag amb-handler))
 	  amb-abort-tag
 	  (thunk (reverse result)))
-	 (reverse result))))
-    ((_ () body ...)
-     (collect ((make <dfs>)) body ...))))
+	 (reverse result)))]
+    [(_ () body ...)
+     (collect ((make <dfs>)) body ...)]))
 
 
 (define (an-integer->= n)
@@ -389,7 +389,7 @@
 
 (define (an-integer-between m n)
   (amb-list*
-   (for/list ((i (in-range m (add1 n))))
+   (for/list ([i (in-range m (add1 n))])
      i)))
 
 (define-for-syntax (make-integer-list m n)
@@ -399,8 +399,8 @@
 
 (define-syntax (an-integer-between* stx)
   (syntax-case stx ()
-    ((_ m n)
-     #`(amb #,@(make-integer-list (syntax->datum #'m) (syntax->datum #'n))))))
+    [(_ m n)
+     #`(amb #,@(make-integer-list (syntax->datum #'m) (syntax->datum #'n)))]))
 
 (define (an-integer-between** m n)
   (if (> m n)
@@ -410,27 +410,27 @@
 ;; (an-integer-between* 1 10)
 
 (define (a-multiple-of k)
-  (let ((multiplier (an-integer->= 1)))
+  (let ([multiplier (an-integer->= 1)])
     (* multiplier k)))
 
 (define (a-factor-of** k)
-  (let ((i (an-integer-between 2 (floor (/ k 2)))))
+  (let ([i (an-integer-between 2 (floor (/ k 2)))])
     (if (zero? (modulo k i))
 	i
 	(fail))))
 
 (define (a-factor-of* k)
-  (let loop ((i 2))
-    (cond ((zero? (modulo k i))
+  (let loop ([i 2])
+    (cond [(zero? (modulo k i))
 	   (deliver i)
-	   (loop (add1 i)))
-	  ((i . >= . (floor (/ k 2)))
-	   (fail))
-	  (else
-	   (loop (add1 i))))))
+	   (loop (add1 i))]
+	  [(i . >= . (floor (/ k 2)))
+	   (fail)]
+	  [else
+	   (loop (add1 i))])))
 
 (define (a-factor-of k)
-  (for ((i (in-range 2 (floor (/ k 2)))))
+  (for ([i (in-range 2 (floor (/ k 2)))])
     (when (zero? (modulo k i))
       (deliver i)))
   (fail))

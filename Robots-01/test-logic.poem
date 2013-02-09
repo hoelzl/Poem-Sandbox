@@ -241,11 +241,11 @@
    (define vars (find-variables-in clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 3)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?z))))
 
   (test-case
@@ -255,9 +255,9 @@
    (define vars (find-variables-in clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 2)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y))))
 
 
@@ -268,11 +268,11 @@
    (define vars (find-variables-in clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 3)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?z))))
 
     
@@ -283,11 +283,11 @@
    (define vars (variables clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 3)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?z))))
 
   (test-case
@@ -297,9 +297,9 @@
    (define vars (variables clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 2)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y))))
 
 
@@ -310,11 +310,11 @@
    (define vars (variables clause))
    (check-pred set? vars)
    (check-equal? (set-count vars) 3)
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?x)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?y)))
-   (check-true (for/or ((var (in-set vars)))
+   (check-true (for/or ([var (in-set vars)])
 		 (equal? (name var) '?z))))
 
   (test-case
@@ -323,7 +323,7 @@
    (define clause (:- (f ?x ?y) (g ?x ?y)))
    (define vars (fresh-variables-for clause))
    (check-equal? (length vars) 2)
-   (for ((binding (in-list vars)))
+   (for ([binding (in-list vars)])
      (check-true (logic-variable? (car binding)))
      (check-true (logic-variable? (cdr binding)))
      (check-not-eq? (car binding) (cdr binding))

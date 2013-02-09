@@ -42,14 +42,14 @@
   (test-case
    "Amb Test 13b"
    (check-equal?
-    (collect () (let ((x (an-integer-between 3 6)))
+    (collect () (let ([x (an-integer-between 3 6)])
 		  x))
     '(3 4 5 6)))
 
   (test-case
    "Amb Test 13c"
    (check-equal?
-    (collect () (let ((x (an-integer-between 3 6)))
+    (collect () (let ([x (an-integer-between 3 6)])
 		  (if (even? x)
 		      x
 		      (fail))))
@@ -82,7 +82,7 @@
   (test-case
    "Amb Test 13h"
    (check-equal?
-    (collect () (let ((x (amb 3 4 5 6)))
+    (collect () (let ([x (amb 3 4 5 6)])
 		  (if (even? x)
 		      x
 		      (fail))))
@@ -92,8 +92,8 @@
    "Amb Test 14"
    (check-equal?
     (collect ()
-	     (let ((x (amb 1 2 3 4 5))
-		   (y (amb 2 4 6)))
+	     (let ([x (amb 1 2 3 4 5)]
+		   [y (amb 2 4 6)])
 	       (if (and (even? x) (even? y)
 			(>= (+ x y) 7))
 		   (list x y)
@@ -104,8 +104,8 @@
    "Amb Test 14a"
    (check-equal?
     (collect ()
-	     (let ((x (an-integer-between 1 10))
-		   (y (an-integer-between 1 10)))
+	     (let ([x (an-integer-between 1 10)]
+		   [y (an-integer-between 1 10)])
 	       (if (and (even? x) (even? y)
 			(>= (+ x y) 7))
 		   (list x y)
@@ -121,8 +121,8 @@
    "Amb Test 14b"
    (check-equal?
     (collect ()
-	     (let ((x (an-integer-between* 1 10))
-		   (y (an-integer-between* 1 10)))
+	     (let ([x (an-integer-between* 1 10)]
+		   [y (an-integer-between* 1 10)])
 	       (if (and (even? x) (even? y)
 			(>= (+ x y) 7))
 		   (list x y)
@@ -134,14 +134,14 @@
       (8 2) (8 4) (8 6) (8 8) (8 10)
       (10 2) (10 4) (10 6) (10 8) (10 10))))
 
-  (let ((gen-numbers
+  (let ([gen-numbers
 	 (lambda ()
-	   (let ((x (an-integer-between 1 6))
-		 (y (an-integer-between 1 6)))
+	   (let ([x (an-integer-between 1 6)]
+		 [y (an-integer-between 1 6)])
 	     (if (and (even? x) (even? y)
 		      (>= (+ x y) 7))
 		 (list x y)
-		 (fail))))))
+		 (fail))))])
     (test-case
      "Amb Test 14c"
      (check-equal?
@@ -153,7 +153,7 @@
    "Amb Test 15"
    (check-equal?
     (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
-	     (let ((x (an-integer->= 1)))
+	     (let ([x (an-integer->= 1)])
 	       (when (< x 10)
 		 (fail))
 	       x))
@@ -164,7 +164,7 @@
    (check-equal?
     (collect ((make <dfs> :result-strategy (make <n-results-strategy>
 					     :number-of-results 5)))
-	     (let ((x (an-integer->= 1)))
+	     (let ([x (an-integer->= 1)])
 	       (when (< x 10)
 		 (fail))
 	       x))
@@ -305,13 +305,13 @@
   ;; 	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
   )
 
-(define-test-suite big-amb-suite
+(define-test-suite medium-amb-suite
   amb-suite
 
   (test-case "Amb Test 14d"
     (collect ()
-     (let ((x (an-integer-between 1 50))
-	   (y (an-integer-between 1 50)))
+     (let ([x (an-integer-between 1 33)]
+	   [y (an-integer-between 1 33)])
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
@@ -319,17 +319,29 @@
 
   (test-case "Amb Test 14e"
     (collect ()
-     (let ((x (an-integer-between 1 100))
-	   (y (an-integer-between 1 100)))
+     (let ([x (an-integer-between 1 50)]
+	   [y (an-integer-between 1 50)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail))))))
+
+(define-test-suite big-amb-suite
+  medium-amb-suite
+
+  (test-case "Amb Test 14f"
+    (collect ()
+     (let ([x (an-integer-between 1 100)]
+	   [y (an-integer-between 1 100)])
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
   	 (fail)))))
 
-  (test-case "Amb Test 14f"
+  (test-case "Amb Test 14g"
     (collect ((make <ids>))
-     (let ((x (an-integer-between 1 100))
-	   (y (an-integer-between 1 100)))
+     (let ([x (an-integer-between 1 100)]
+	   [y (an-integer-between 1 100)])
        (if (and (even? x) (even? y)
   	      (>= (+ x y) 7))
   	 (list x y)
