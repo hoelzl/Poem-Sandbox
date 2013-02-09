@@ -262,7 +262,9 @@
   (define relation (find-relation functor))
   (define result
     (apply call-next-method real-class
-	   :functor functor :head new-head :body new-body initargs))
+	   :functor functor :head new-head :body new-body
+	   :variables (map cdr bindings-2)
+	   initargs))
   (add-clause relation result)
   result)
 
