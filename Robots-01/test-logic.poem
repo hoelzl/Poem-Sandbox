@@ -8,6 +8,18 @@
   (check-not-false (instance-of? var  <logic-variable>))
   (check-equal? (name var) var-name))
 
+(define-simple-check (check-renamed-variables lhs rhs)
+  (cond ((logic-variable? lhs)
+	 (check-pred logic-variable? rhs "Not a logic variable")
+	 (check-not-eq? lhs rhs "Logic variables are equal")
+	 (check-eq? (name lhs) (name rhs) "Names differ"))
+	((pair? lhs)
+	 (check-pred pair? rhs "Not a pair")
+	 (check-renamed-variables (car lhs) (car rhs))
+	 (check-renamed-variables (cdr lhs) (cdr rhs)))
+	(else
+	 (check-eq? lhs rhs "Not variables and not equal"))))
+
 (define-test-suite relations-suite
 
   (test-case
@@ -220,7 +232,110 @@
      (check-logical-variable (third bc) '?y)
      (check-eq? (second hd) (second bc))
      (check-eq? (third hd) (third bc))
-     (check-equal? (clauses (find-relation 'f 2)) (list clause)))))
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
+  
+  (test-case
+   "find-variables-in 1"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?z) (h ?z ?y)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "find-variables-in 2"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x 1) (h 1 2)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 2)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y))))
+
+
+  (test-case
+   "find-variables-in 3"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y ?z)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?z))))
+
+    
+  (test-case
+   "variables 1"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?z) (h ?z ?y)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "variables 2"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x 1) (h 1 2)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 2)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y))))
+
+
+  (test-case
+   "variables 3"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y ?z)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?x)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?y)))
+   (check-true (for/or ((var (in-set vars)))
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "fresh-variables-for"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?y)))
+   (define vars (fresh-variables-for clause))
+   (check-equal? (length vars) 2)
+   (for ((binding (in-list vars)))
+     (check-true (logic-variable? (car binding)))
+     (check-true (logic-variable? (cdr binding)))
+     (check-not-eq? (car binding) (cdr binding))
+     (check-eq? (name (car binding)) (name (cdr binding)))))
+
+  (test-case
+   "rename-variables"
+   (clear-all-relations)
+   (define clause-1 (:- (f ?x ?y) (g ?x ?y)))
+   (define clause-2 (rename-variables clause-1))
+   (check-renamed-variables (head clause-1) (head clause-2))
+   (check-renamed-variables (body clause-1) (body clause-2))))
 
 
 (define-test-suite unification-suite
@@ -269,7 +384,10 @@
    (check equal? (unify `,x `,y) `((,x . ,y)))
    (check equal? (unify `(,x ,x) `(,y ,y)) `((,x . ,y)))
    (check equal? (unify `(,x ,x ,x) `(,y ,y ,y)) `((,x . ,y)))
-   (check equal? (unify `(,x ,y) `(,y ,x)) `((,x . ,y))))
+   (check equal? (unify `(,x ,y) `(,y ,x)) `((,x . ,y)))
+   (check-false (unify 1 2))
+   (check-false (unify `(f ,x) `(g ,x)))
+   (check-false (unify x `(f ,x))))
 
   ;; TODO: Tests for occurs check.
 

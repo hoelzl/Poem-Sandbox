@@ -3,19 +3,7 @@
 (require "utils.poem")
 (require racket/set)
 
-(provide <logic-variable>
-	 name
-	 make-logic-variable
-	 logic-variable-name?
-	 introduce-logic-variables
-
-	 <relation>
-	 name arity functor clauses
-	 add-clause variables
-	 
-	 all-relations clear-all-relations
-	 remove-relation! find-relation set-find-relation!
-
+(provide 
 	 name+arity->functor
 	 predicate-names->functors
 	 functor-regexp
@@ -23,13 +11,33 @@
 	 parse-functor-description
 	 functor-and-term-compatible?
 
+	 <logic-variable>
+	 logic-variable?
+	 name
+	 make-logic-variable
+	 logic-variable-name?
+	 introduce-logic-variables
+
+	 <relation>
+	 relation?
+	 name arity functor clauses
+	 add-clause variables
+	 
+	 all-relations clear-all-relations
+	 remove-relation! find-relation set-find-relation!
+
 	 <horn-clause>
+	 horn-clause?
 	 functor head
 	 <horn-fact>
+	 horn-fact?
 	 <horn-rule>
+	 horn-rule?
 	 body
 
 	 :-
+	 find-variables-in fresh-variables-for
+	 rename-variables
 
 	 get-binding binding-val lookup extend-bindings
 	 unify unify-variable
@@ -266,13 +274,18 @@
   (cond ((pair? term)
 	 (set-union (find-variables-in (car term))
 		    (find-variables-in (cdr term))))
+	((horn-fact? term)
+	 (find-variables-in (head term)))
+	((horn-rule? term)
+	 (set-union (find-variables-in (head term))
+		    (find-variables-in (body term))))
 	((logic-variable? term)
 	 (set term))
 	(else
 	 (set))))
 
 (defmethod make ((class (singleton <horn-clause>))
-		 &key head body &rest initargs)
+		 &key head body add-to-relation? &rest initargs)
   (define real-class (if (and body (not (empty? body)))
 			 <horn-rule>
 			 <horn-fact>))
@@ -291,7 +304,8 @@
 	   :variables (set-union (find-variables-in new-head)
 				 (find-variables-in new-body))
 	   initargs))
-  (add-clause relation result)
+  (when add-to-relation?
+    (add-clause relation result))
   result)
 
 (define-syntax :-
@@ -304,7 +318,8 @@
 	 :functor functor
 	 :head (predicate-names->functors '(name arg ...))
 	 :body (predicate-names->functors '(exp ...))
-	 :relation relation)))))
+	 :relation relation
+	 :add-to-relation? #t)))))
 
 
 ;;; Bindings and Standardizing Apart
