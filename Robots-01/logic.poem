@@ -249,24 +249,24 @@
 	 :relation relation)))))
 
 
-(define (subst-bindings bindings x)
+(define (subst-bindings x bindings)
   (define (subst-in-binding-val binding)
-    (subst-bindings bindings (binding-val binding)))
+    (subst-bindings (binding-val binding) bindings))
   (cond ((not bindings) #f)
 	((null? bindings) x)
 	((and (logic-variable? x) (get-binding x bindings))
 	 => subst-in-binding-val)
 	((not (pair? x)) x)
 	(else
-	 (reuse-cons (subst-bindings bindings (car x))
-		     (subst-bindings bindings (cdr x))
+	 (reuse-cons (subst-bindings (car x) bindings)
+		     (subst-bindings (cdr x) bindings)
 		     x))))
 
 (define (rename-variables clause bindings)
   (make <horn-clause>
     :functor (functor clause)
-    :head (subst-bindings bindings (head clause))
-    :body (subst-bindings bindings (body clause))
+    :head (subst-bindings (head clause) bindings)
+    :body (subst-bindings (body clause) bindings)
     :relation (relation clause)
     :variables (map cdr bindings)))
 
@@ -289,8 +289,8 @@
 (define (unify x y (bindings '()))
   (cond ((not bindings) #f)
 	((eq? x y) bindings)
-	((logic-variable-name? x) (unify-variable x y bindings))
-	((logic-variable-name? y) (unify-variable y x bindings))
+	((logic-variable? x) (unify-variable x y bindings))
+	((logic-variable? y) (unify-variable y x bindings))
 	((and (pair? x) (pair? y))
 	 (unify (rest x) (rest y) (unify (first x) (first y) bindings)))
 	(else #f)))
@@ -307,7 +307,7 @@
 	 bindings)
 	((get-binding var bindings)
 	 => unify-binding)
-	((and (logic-variable-name? x) (get-binding x bindings))
+	((and (logic-variable? x) (get-binding x bindings))
 	 => unify-bound-variable)
 	((and (perform-occurs-check?) (occurs-check? var x bindings))
 	 #f)
@@ -325,4 +325,4 @@
 	(else #f)))
 
 (define (apply-unifier x y)
-  (subst-bindings (unify x y) x))
+  (subst-bindings x (unify x y)))

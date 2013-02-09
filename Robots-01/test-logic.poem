@@ -249,40 +249,54 @@
 
   (test-case
    "unify-variable"
-   (check equal? (unify-variable '?x '?x '((?x . ?y))) '((?x . ?y)))
-   (check equal? (unify-variable '?y '?y '((?x . ?y))) '((?x . ?y)))
-   (check equal? (unify-variable '?z '?z '((?x . ?y))) '((?x . ?y)))
-   (check equal? (unify-variable '?x '?z '((?x . ?y))) '((?y . ?z) (?x . ?y)))
-   (check equal? (unify-variable '?x '?y '((?x . ?y))) '((?x . ?y)))
-   (check equal? (unify-variable '?y '?x '((?x . ?y))) '((?x . ?y))))
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define z (make <logic-variable> :name '?z))
+   (define bindings `((,x . ,y)))
+   (check equal? (unify-variable x x bindings) bindings)
+   (check equal? (unify-variable y y bindings) bindings)
+   (check equal? (unify-variable z z bindings) bindings)
+   (check equal? (unify-variable x z bindings) `((,y . ,z) ,@bindings))
+   (check equal? (unify-variable x y bindings) bindings)
+   (check equal? (unify-variable y x bindings) bindings))
 
   (test-case
    "unify"
-   (check equal? (unify '(+ ?x 1) '(+ 2 ?y)) '((?y . 1) (?x . 2)))
-   (check equal? (unify '?x '?y) '((?x . ?y)))
-   (check equal? (unify '(?x ?x) '(?y ?y)) '((?x . ?y)))
-   (check equal? (unify '(?x ?x ?x) '(?y ?y ?y)) '((?x . ?y)))
-   (check equal? (unify '(?x ?y) '(?y ?x)) '((?x . ?y))))
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define z (make <logic-variable> :name '?z))
+   (check equal? (unify `(+ ,x 1) `(+ 2 ,y)) `((,y . 1) (,x . 2)))
+   (check equal? (unify `,x `,y) `((,x . ,y)))
+   (check equal? (unify `(,x ,x) `(,y ,y)) `((,x . ,y)))
+   (check equal? (unify `(,x ,x ,x) `(,y ,y ,y)) `((,x . ,y)))
+   (check equal? (unify `(,x ,y) `(,y ,x)) `((,x . ,y))))
 
   ;; TODO: Tests for occurs check.
 
   (test-case
    "subst-bindings"
-   (check equal? (subst-bindings '((?x . 1)) '?x) 1)
-   (check equal? (subst-bindings '((?x . 1)) '?y) '?y)
-   (check equal? (subst-bindings '((?x . 1)) '(a ?y ?x)) '(a ?y 1))
-   (check eq? (subst-bindings '((?x . 1)) '?z) '?z)
-   (let ((my-list '(a ?y ?z)))
-     (check eq? (subst-bindings '((?x . 1)) my-list) my-list)))
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define bindings `((,x . 1)))
+   (check equal? (subst-bindings x bindings) 1)
+   (check equal? (subst-bindings y bindings) y)
+   (check eq? (subst-bindings y  bindings) y)
+   (check equal? (subst-bindings `(a ,y ,x) bindings) `(a ,y 1))
+   (let ((my-term `(a ,y 1)))
+     (check eq? (subst-bindings my-term bindings) my-term)))
 
   (test-case
    "apply-unifier"
-   (check equal? (apply-unifier '(?x 1) '(f ?y)) '(f 1))
-   (check equal? (apply-unifier '(?x 1) '(?y 1)) '(?y 1))
-   (check-false (apply-unifier '(?x 1) '(?y 2)))
-   (check-false (apply-unifier '(?x 1) '(?y 1 2)))
-   (check-false (apply-unifier '(?x 1 2) '(?y 1)))
-   (check-false (apply-unifier '?x '(f ?x)))))
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (check equal? (apply-unifier `(,x 1) `(f ,y)) '(f 1))
+   (check equal? (apply-unifier `(,x 1) `(,y 1)) `(,y 1))
+   (check-false (apply-unifier `(,x 1) `(,y 2)))
+   (check-false (apply-unifier `(,x 1) `(,y 1 2)))
+   (check-false (apply-unifier `(,x 1 2) `(,y 1)))
+   ;; This will run into an endless loop if occurs check is disabled...
+   (perform-occurs-check? #t)
+   (check-false (apply-unifier x `(f ,x)))))
 
 
 (define-test-suite logic-suite
