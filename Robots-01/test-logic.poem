@@ -29,6 +29,7 @@
    (check-equal? (name+arity->functor 'foo/1 2) 'foo/1/2)
    (check-equal? (name+arity->functor '/ 2) '//2))
 
+  #;
   (test-case
    "predicate-names->functors"
    (check-equal? (predicate-names->functors '?x) '?x)
@@ -206,10 +207,11 @@
      (check instance-of? clause <horn-fact>)
      (check-equal? (functor clause) 'f/2)
      (define hd (head clause))
-     (check-equal? (first hd) 'f/2)
-     (check-equal? (length hd) 3)
-     (check-logical-variable (second hd) '?x)
-     (check-logical-variable (third hd) '?y)
+     (check instance-of? hd <relation-term>)
+     (check-equal? (functor hd) 'f/2)
+     (check-equal? (arity hd) 2)
+     (check-logical-variable (first (arguments hd)) '?x)
+     (check-logical-variable (second (arguments hd)) '?y)
      (check-equal? (clauses (find-relation 'f 2)) (list clause))))
   
   (test-case
@@ -219,19 +221,22 @@
      (check instance-of? clause <horn-rule>)
      (check-equal? (functor clause) 'f/2)
      (define hd (head clause))
-     (check-equal? (first hd) 'f/2)
-     (check-equal? (length hd) 3)
-     (check-logical-variable (second hd) '?x)
-     (check-logical-variable (third hd) '?y)
+     (check instance-of? hd <relation-term>)
+     (check-equal? (functor hd) 'f/2)
+     (check-equal? (arity hd) 2)
+     (check-logical-variable (first (arguments hd)) '?x)
+     (check-logical-variable (second (arguments hd)) '?y)
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))
      (define bd (body clause))
+     (check instance-of? bd <list>)
      (check-equal? (length bd) 1)
      (define bc (first bd))
-     (check-equal? (first bc) 'g/2)
-     (check-equal? (length bc) 3)
-     (check-logical-variable (second bc) '?x)
-     (check-logical-variable (third bc) '?y)
-     (check-eq? (second hd) (second bc))
-     (check-eq? (third hd) (third bc))
+     (check-equal? (functor bc) 'g/2)
+     (check-equal? (arity bc) 2)
+     (check-logical-variable (first (arguments bc)) '?x)
+     (check-logical-variable (second (arguments bc)) '?y)
+     (check-eq? (first (arguments hd)) (first (arguments bc)))
+     (check-eq? (second (arguments hd)) (second (arguments bc)))
      (check-equal? (clauses (find-relation 'f 2)) (list clause))))
   
   (test-case
