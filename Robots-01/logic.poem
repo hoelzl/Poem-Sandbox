@@ -37,6 +37,9 @@
 	 subst-bindings
 	 apply-unifier)
 
+;;; Tools for Handling Functors
+;;; ===========================
+
 (define functor-regexp #rx"^(.+)/([1-9][0-9]*)$")
 
 (define (name+arity->functor name arity)
@@ -60,39 +63,6 @@
 		     (map predicate-names->functors tail)))
 	    (map predicate-names->functors expression)))
       expression))
-
-
-(defstruct <logic-variable> ()
-  name)
-
-(defmethod name ((var <logic-variable>))
-  (logic-variable-name var))
-
-(define (logic-variable-name? x)
-  (and (symbol? x)
-       (eq? (string-ref (symbol->string x) 0) #\?)))
-
-;;; TODO: Add other datatypes
-(define (introduce-logic-variables term (bindings '()))
-  (cond ((pair? term)
-	 (define-values (result-car bindings-1)
-	   (introduce-logic-variables (car term) bindings))
-	 (define-values (result-cdr result-bindings)
-	   (introduce-logic-variables (cdr term) bindings-1))
-	 (values (reuse-cons result-car result-cdr term)
-		 result-bindings))
-	((null? term)
-	 (values '() bindings))
-	((logic-variable-name? term)
-	 (define binding (assoc term bindings))
-	 (if binding
-	     (values (cdr binding) bindings)
-	     (let* ((new-var (make <logic-variable> :name term))
-		    (new-bindings (list* (cons term new-var) bindings)))
-	       (values new-var new-bindings))))
-	(else
-	 (values term bindings))))
-
 
 (define (parse-functor-name functor)
   (unless (symbol? functor)
@@ -140,6 +110,43 @@
   (values functor name arity))
 
 
+;;; Logic Variables
+;;; ===============
+
+(defstruct <logic-variable> ()
+  name)
+
+(defmethod name ((var <logic-variable>))
+  (logic-variable-name var))
+
+(define (logic-variable-name? x)
+  (and (symbol? x)
+       (eq? (string-ref (symbol->string x) 0) #\?)))
+
+;;; TODO: Add other datatypes
+(define (introduce-logic-variables term (bindings '()))
+  (cond ((pair? term)
+	 (define-values (result-car bindings-1)
+	   (introduce-logic-variables (car term) bindings))
+	 (define-values (result-cdr result-bindings)
+	   (introduce-logic-variables (cdr term) bindings-1))
+	 (values (reuse-cons result-car result-cdr term)
+		 result-bindings))
+	((null? term)
+	 (values '() bindings))
+	((logic-variable-name? term)
+	 (define binding (assoc term bindings))
+	 (if binding
+	     (values (cdr binding) bindings)
+	     (let* ((new-var (make <logic-variable> :name term))
+		    (new-bindings (list* (cons term new-var) bindings)))
+	       (values new-var new-bindings))))
+	(else
+	 (values term bindings))))
+
+
+;;; Relations
+;;; =========
 
 ;;; TODO: <relation> is not a particularly good name for the concept
 ;;; represented by this class, since relations can (and should) be
@@ -157,6 +164,8 @@
   clauses)
 
 (define <relation> <%relation>)
+
+(define relation? %relation?)
 
 (defmethod name ((rel <relation>))
   (%relation-name rel))
@@ -206,6 +215,11 @@
 	(hash-set! all-relations functor rel)
 	rel)))
 
+
+
+;;; Horn Clauses
+;;; ============
+
 (define (functor-and-term-compatible? functor term)
   (and (pair? term) (eq? functor (first term))))
 
@@ -248,6 +262,14 @@
 (defmethod body ((clause <horn-rule>))
   (horn-rule-body clause))
 
+(define (find-variables-in term)
+  (cond ((pair? term)
+	 (set-union (find-variables-in (car term))
+		    (find-variables-in (cdr term))))
+	((logic-variable? term)
+	 (set term))
+	(else
+	 (set))))
 
 (defmethod make ((class (singleton <horn-clause>))
 		 &key head body &rest initargs)
@@ -263,7 +285,11 @@
   (define result
     (apply call-next-method real-class
 	   :functor functor :head new-head :body new-body
-	   :variables (map cdr bindings-2)
+	   ;; Need to scan head and body, in case they already
+	   ;; contained logic variables that we didn't introduce
+	   ;; ourselves.
+	   :variables (set-union (find-variables-in new-head)
+				 (find-variables-in new-body))
 	   initargs))
   (add-clause relation result)
   result)
@@ -281,29 +307,8 @@
 	 :relation relation)))))
 
 
-(define (subst-bindings x bindings)
-  (define (subst-in-binding-val binding)
-    (subst-bindings (binding-val binding) bindings))
-  (cond ((not bindings) #f)
-	((null? bindings) x)
-	((and (logic-variable? x) (get-binding x bindings))
-	 => subst-in-binding-val)
-	((not (pair? x)) x)
-	(else
-	 (reuse-cons (subst-bindings (car x) bindings)
-		     (subst-bindings (cdr x) bindings)
-		     x))))
-
-(define (rename-variables clause bindings)
-  (make <horn-clause>
-    :functor (functor clause)
-    :head (subst-bindings (head clause) bindings)
-    :body (subst-bindings (body clause) bindings)
-    :relation (relation clause)
-    :variables (map cdr bindings)))
-
-;;; A simple unification algorithm, following Norvig's implementation
-;;; in PAIP.
+;;; Bindings and Standardizing Apart
+;;; ================================
 
 (define (get-binding var bindings)
   (assoc var bindings))
@@ -316,6 +321,38 @@
 
 (define (extend-bindings var val bindings)
   (cons (cons var val) bindings))
+
+
+(define (subst-variables x bindings)
+  (cond ((not (list? bindings))
+	 (error "Variable bindings must be a list;"))
+	((logic-variable? x)
+	 (define binding (get-binding x bindings))
+	 (if binding (binding-val binding) x))
+	((pair? x)
+	 (reuse-cons (subst-variables (car x) bindings)
+		     (subst-variables (cdr x) bindings)
+		     x))
+	((not (pair? x)) x)))
+
+(define (fresh-variables-for clause)
+  (for/list ((var (in-set (variables clause))))
+    (cons var (make <logic-variable>
+		:name (logic-variable-name var)))))
+
+(define (rename-variables clause [bindings (fresh-variables-for clause)])
+  (make <horn-clause>
+    :functor (functor clause)
+    :head (subst-variables (head clause) bindings)
+    :body (subst-variables (body clause) bindings)
+    :relation (relation clause)))
+
+
+;;; Unification
+;;; ===========
+
+;;; A simple unification algorithm, following Norvig's implementation
+;;; in PAIP.
 
 ;;; TODO: Extend with other datatypes...
 (define (unify x y (bindings '()))
@@ -355,6 +392,19 @@
 	((pair? x) (or (occurs-check? var (first x) bindings)
 		       (occurs-check? var (rest x) bindings)))
 	(else #f)))
+
+(define (subst-bindings x bindings)
+  (define (subst-in-binding-val binding)
+    (subst-bindings (binding-val binding) bindings))
+  (cond ((not bindings) #f)
+	((null? bindings) x)
+	((and (logic-variable? x) (get-binding x bindings))
+	 => subst-in-binding-val)
+	((not (pair? x)) x)
+	(else
+	 (reuse-cons (subst-bindings (car x) bindings)
+		     (subst-bindings (cdr x) bindings)
+		     x))))
 
 (define (apply-unifier x y)
   (subst-bindings x (unify x y)))
