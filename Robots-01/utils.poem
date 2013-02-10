@@ -16,13 +16,13 @@
 
 (define-syntax assert
   (syntax-rules ()
-    ((_ pred)
+    [(_ pred)
      (unless pred
-       (error (format "Assertion ~v failed!" 'pred))))
-    ((_ pred format-string arg ...)
+       (error (format "Assertion ~v failed!" 'pred)))]
+    [(_ pred format-string arg ...)
      (unless pred
        (error (format (string-append "Assertion ~v failed; " format-string)
-		      'pred arg ...))))))
+		      'pred arg ...)))]))
 
 ;;; TODO: Add missing data structures to contains?.
 (define (contains? elt tree) 

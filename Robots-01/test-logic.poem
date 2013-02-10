@@ -4,6 +4,10 @@
 (require rackunit/text-ui)
 (require "logic.poem")
 
+(provide relations-suite
+	 unification-suite
+	 logic-suite)
+
 (define-simple-check (check-logical-variable var var-name)
   (check-not-false (instance-of? var  <logic-variable>))
   (check-equal? (name var) var-name))
@@ -428,5 +432,6 @@
 
 ;;; TODO: delete this when the main implementation work is done and
 ;;; the test suite is integrated into the Poem tests.
-(printf "\nRunning tests for logic.poem\n")
-(run-tests logic-suite)
+#;(printf "\nRunning tests for logic.poem\n")
+#;(run-tests logic-suite)
+

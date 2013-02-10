@@ -30,7 +30,7 @@
 
 (define print-situation
   (lambda (obj rec? &opt [port (current-output-port)])
-    (let ((printer (if rec? write-object display-object)))
+    (let ([printer (if rec? write-object display-object)])
       (printer (format "#<situation: actions=~a>"
                        (map (lambda (ai)
                               (format "#<action-instance: ~a arguments=~a>"
@@ -78,9 +78,9 @@
 (defclass <logical-class> (<class>)
   :printer #t)
 
-(defmethod compute-slots ((class <logical-class>))
-  (let ((slots (call-next-method)))
-    (for ((slot (in-list slots)))
+(defmethod compute-slots ([class <logical-class>])
+  (let ([slots (call-next-method)])
+    (for ([slot (in-list slots)])
       (when (getarg (rest slot) :fluent #f)
         ;; (printf "Creating fluent ~a\n" (first slot))
         (maybe-make-fluent (first slot))))
@@ -106,7 +106,7 @@
   :autoaccessors :slot
   :auto #t)
 
-(defmethod initialize ((action <action>) initargs)
+(defmethod initialize ([action <action>] initargs)
   (call-next-method)
   (hash-set! all-action-names (name action) action))
 
@@ -127,15 +127,15 @@
 (define-syntax define-action
   (lambda (stx)
     (syntax-case stx ()
-      ((_ id exp1
+      [(_ id exp1
           :precondition exp2
           exp ...)
        #'(define id
-           (let ((act (make <action>
+           (let ([act (make <action>
                         :name 'id
                         :parameters 'exp1
                         :precondition 'exp2
-                        :effect-axiom (convert-to-axiom '(exp ...)))))
+                        :effect-axiom (convert-to-axiom '(exp ...)))])
              (set-instance-proc! act
                                  (lambda exp1
                                    (assert exp2)
@@ -143,9 +143,9 @@
                                                             act (list . exp1))
                                                            (current-situation)))
                                    exp ... ))
-             act)))
-      ((_ id exp1 exp ...)
-       #'(define-action id exp1 :precondition true exp ...)))))
+             act))]
+      [(_ id exp1 exp ...)
+       #'(define-action id exp1 :precondition true exp ...)])))
 
 (define (@pre exp)
   exp)
@@ -184,13 +184,13 @@
 ||#
 
 (define (generate-successor-state-axiom-for-fluent fluent-name)
-  (let ((parts (generate-successor-state-parts-for-fluent fluent-name)))
+  (let ([parts (generate-successor-state-parts-for-fluent fluent-name)])
     (build-successor-state-axiom-from-parts parts)))
 
 (define (generate-successor-state-parts-for-fluent fluent-name)
-  (for/list (((action-name action) (in-hash all-action-names)))
-    (let-values (((relevant? new-formula previous-formula)
-                  (extract-successor-state-parts action fluent-name)))
+  (for/list ([(action-name action) (in-hash all-action-names)])
+    (let-values ([(relevant? new-formula previous-formula)
+                  (extract-successor-state-parts action fluent-name)])
       ; #:break (not relevant?)
       (make-successor-state-part new-formula previous-formula))))
 

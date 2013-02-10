@@ -87,13 +87,13 @@
   :autoaccessors :slot
   :auto #t)
 
-(defmethod collect-result ((strategy <multi-result-strategy>) node)
+(defmethod collect-result ([strategy <multi-result-strategy>] node)
   (define node-is-void? (eq? node (void)))
   (unless node-is-void?
     (enqueue! (results strategy) node))
   #t)
 
-(defmethod result-list ((strategy <multi-result-strategy>))
+(defmethod result-list ([strategy <multi-result-strategy>])
   (queue->list (results strategy)))
 
 
@@ -124,7 +124,7 @@
   :auto #t
   :autoaccessors :slot)
 
-(defmethod collect-result ((strategy <n-results-strategy>) node)
+(defmethod collect-result ([strategy <n-results-strategy>] node)
   (cond [(eq? node (void))
 	 #t]
 	[else
@@ -136,7 +136,7 @@
 
 (defclass <numeric-results-strategy> (<multi-result-strategy>))
 
-(defmethod collect-result ((strategy <numeric-results-strategy>) node)
+(defmethod collect-result ([strategy <numeric-results-strategy>] node)
   (when (number? node)
     (enqueue! (results strategy) node))
   #t)
@@ -147,17 +147,17 @@
   :auto #t
   :autoaccessors :slot)
 
-(defgeneric next-node! ((strategy <search-strategy>)))
+(defgeneric next-node! ([strategy <search-strategy>]))
 
-(defgeneric add-initial-node! ((strategy <search-strategy>) node))
-(defmethod add-initial-node! ((strategy <search-strategy>) node)
+(defgeneric add-initial-node! ([strategy <search-strategy>] node))
+(defmethod add-initial-node! ([strategy <search-strategy>] node)
   (add-node! strategy node))
 ;;; Do we need add initial-nodes! as well?
 
-(defgeneric add-node! ((strategy <search-strategy>) node))
-(defgeneric add-nodes! ((strategy <search-strategy>) nodes))
+(defgeneric add-node! ([strategy <search-strategy>] node))
+(defgeneric add-nodes! ([strategy <search-strategy>] nodes))
 
-(defmethod collect-result ((strategy <search-strategy>) node)
+(defmethod collect-result ([strategy <search-strategy>] node)
   (collect-result (result-strategy strategy) node))
 
 (defmethod result-list ([strategy <search-strategy>])
@@ -168,7 +168,7 @@
   :auto #t
   :autoaccessors :slot)
 
-(defmethod next-node! ((strategy <list-search-strategy>))
+(defmethod next-node! ([strategy <list-search-strategy>])
   (define ks (nodes strategy))
   (if (empty? ks)
       #f
@@ -179,22 +179,22 @@
 
 (defclass <dfs> (<list-search-strategy>))
 
-(defmethod add-node! ((strategy <dfs>) k)
+(defmethod add-node! ([strategy <dfs>] k)
   (setf! (nodes strategy)
 	 (list* k (nodes strategy))))
 
-(defmethod add-nodes! ((strategy <dfs>) ks)
+(defmethod add-nodes! ([strategy <dfs>] ks)
   (setf! (nodes strategy)
 	 (append ks (nodes strategy))))
 
 
 (defclass <bfs> (<list-search-strategy>))
 
-(defmethod add-node! ((strategy <bfs>) k)
+(defmethod add-node! ([strategy <bfs>] k)
   (setf! (nodes strategy)
 	 (append (nodes strategy) (list k))))
 
-(defmethod add-nodes! ((strategy <bfs>) ks)
+(defmethod add-nodes! ([strategy <bfs>] ks)
   (setf! (nodes strategy)
 	 (append (nodes strategy) ks)))
 
@@ -204,10 +204,10 @@
   :auto #t
   :autoaccessors :class-slot)
 
-(defaftermethod initialize ((node <ids-node>) initargs)
+(defaftermethod initialize ([node <ids-node>] initargs)
   (set-instance-proc! node (ids-node-value node)))
 
-(defaftermethod set-ids-node-value! ((node <ids-node>) value)
+(defaftermethod set-ids-node-value! ([node <ids-node>] value)
   (set-instance-proc! node value))
 
 (defclass <ids> (<search-strategy>)
@@ -219,7 +219,7 @@
   :auto #t
   :autoaccessors :slot)
 
-(defmethod collect-result ((strategy <ids>) result)
+(defmethod collect-result ([strategy <ids>] result)
   (debug-printf "collect-result: ~a\n" result)
   (debug-printf "max-depth: ~a, curr-depth: ~a\n" 
 		(max-depth strategy) (curr-depth strategy))
@@ -227,24 +227,24 @@
       (collect-result (result-strategy strategy) result)
       #t))
 
-(defmethod next-node! ((strategy <ids>))
+(defmethod next-node! ([strategy <ids>])
   (define ns (nodes strategy))
-  (cond ((empty? ns)
+  (cond [(empty? ns)
 	 (cond ((need-deepening? strategy)
 		(unless (initial-nodes strategy)
 		  (error "Iterative deepening without initial nodes?"))
 		(setf! (need-deepening? strategy) #f)
 		(inc! (max-depth strategy))
 		(setf! (nodes strategy) (rest (initial-nodes strategy)))
-		(let ((node (first (initial-nodes strategy))))
+		(let ([node (first (initial-nodes strategy))])
 		  (setf! (curr-depth strategy) (ids-node-depth node))
 		  node))
-	       (else #f)))
-	(else
+	       (else #f))]
+	[else
 	 (setf! (nodes strategy) (rest ns))
 	 (let ((node (first ns)))
 	   (setf! (curr-depth strategy) (ids-node-depth node))
-	   node))))
+	   node)]))
 
 (define (maybe-make-ids-node strategy val)
   (if ((curr-depth strategy) . >= . (max-depth strategy))
@@ -265,20 +265,20 @@
 	   vals)))
 
 (defmethod add-node! ((strategy <ids>) k)
-  (let ((new-node (maybe-make-ids-node strategy k)))
+  (let ([new-node (maybe-make-ids-node strategy k)])
     (when new-node
       (setf! (nodes strategy)
 	     (list* new-node (nodes strategy))))))
 
 (defmethod add-initial-node! ([strategy <ids>] k)
-  (let ((new-node (maybe-make-ids-node strategy k)))
+  (let ([new-node (maybe-make-ids-node strategy k)])
     (assert new-node)
     (setf! (initial-nodes strategy) (list new-node))
     (setf! (nodes strategy) (list new-node))))
 
-(defmethod add-nodes! ((strategy <ids>) ns)
+(defmethod add-nodes! ([strategy <ids>] ns)
   ;; We suppose that the new nodes are all at the same depth
-  (let ((new-nodes (maybe-make-ids-nodes strategy ns)))
+  (let ([new-nodes (maybe-make-ids-nodes strategy ns)])
     (when new-nodes
       (setf! (nodes strategy)
 	     (append new-nodes (nodes strategy))))))

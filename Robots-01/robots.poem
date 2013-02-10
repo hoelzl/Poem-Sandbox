@@ -17,7 +17,7 @@
   :autoaccessors :slot
   :auto #t)
 
-(defmethod equals? ((pos1 <pos>) (pos2 <pos>))
+(defmethod equals? ([pos1 <pos>] [pos2 <pos>])
   (and (= (x pos1) (x pos2))
        (= (y pos1) (y pos2))))
 
@@ -42,7 +42,7 @@
   :auto #t
   :metaclass <logical-class>)
 
-(defmethod initialize ((self <robot>) initargs)
+(defmethod initialize ([self <robot>] initargs)
   (call-next-method)
   (all-robots (cons self (all-robots)))
   (when (pair? (position self))

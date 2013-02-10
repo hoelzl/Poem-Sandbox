@@ -3,12 +3,17 @@
 (require rackunit)
 (require "utils.poem")
 
-(test-begin
- (define my-cons '(1 . 2))
- (define my-list '(1 2))
- (check eq? (reuse-cons 1 2 my-cons) my-cons)
- (check eq? (reuse-cons (first my-list) (rest my-list) my-list) my-list)
- (check equal? (reuse-cons 1 (list 2) my-list) my-list))
+(provide utils-suite)
 
-(test-begin
- (check-true (contains? 1 '(1 2 3))))
+(define-test-suite utils-suite
+  (test-case
+   "reuse-cons"
+   (define my-cons '(1 . 2))
+   (define my-list '(1 2))
+   (check eq? (reuse-cons 1 2 my-cons) my-cons)
+   (check eq? (reuse-cons (first my-list) (rest my-list) my-list) my-list)
+   (check equal? (reuse-cons 1 (list 2) my-list) my-list))
+
+  (test-case
+   "contains"
+   (check-true (contains? 1 '(1 2 3)))))

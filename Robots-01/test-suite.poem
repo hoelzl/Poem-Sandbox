@@ -1,0 +1,29 @@
+#lang poem
+
+(require rackunit)
+(require rackunit/text-ui)
+(require rackunit/gui)
+(require "test-utils.poem")
+(require "test-backtracking.poem")
+(require "test-logic.poem")
+
+(define-test-suite poem-suite
+  utils-suite
+  amb-suite
+  logic-suite)
+
+#||
+;;; Text-based interface:
+(run-tests poem-suite)
+
+;;; Graphical interface:
+(test/gui poem-suite)
+
+;;; Or even better, since it does not block the repl:
+(thread (thunk (test/gui poem-suite)))
+||#
+
+(define (run-poem-suite [in-thread? #t])
+  (if in-thread?
+      (thread (thunk (test/gui poem-suite)))
+      (test/gui poem-suite)))
