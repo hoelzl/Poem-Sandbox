@@ -1,6 +1,9 @@
 #lang poem
 
-(provide <result-strategy>
+(provide <var>
+	 value set-value!
+
+	 <result-strategy>
 	 collect-result
 	 <all-results-strategy> <one-result-strategy>
 	 <n-results-strategy>
@@ -43,6 +46,20 @@
     (apply printf args)))
 
 
+;;; Vars
+;;; ====
+
+(define var-hash (make-parameter (make-immutable-hasheq)))
+
+(defclass <var> ())
+
+(defmethod value ([var <var>])
+  (hash-ref (var-hash) var ???))
+
+(defmethod set-value! ([var <var>] new-value)
+  (var-hash (hash-set (var-hash) var new-value)))
+
+
 ;;; Result Strategies
 ;;; =================
 
@@ -52,12 +69,14 @@
 ;; continue, falso otherwise.
 (defgeneric collect-result (strategy node))
 
+
+(define number-of-failures 0)
 ;; Notification that `fail' was called.  Currently mostly useful for
 ;; tracing and debugging, but also intended for reinforcement
 ;; learning.
 (defgeneric record-failure! (strategy))
 (defmethod record-failure! (strategy)
-  ;; Do nothing.
+  ;; (inc! number-of-failures)
   #f)
 
 ;;; Return the results collected by the strategy as a list.
@@ -276,41 +295,43 @@
 (define amb-abort-tag (make-continuation-prompt-tag 'amb-abort))
 (define amb-search-strategy (make-parameter #f))
 
+(define-syntax let/ambcc
+  (syntax-rules ()
+    [(_ cont body ...)
+     (parameterize ([var-hash (var-hash)])
+       (call-with-current-continuation
+	(lambda (cont)
+	  body ...
+	  (debug-printf "Failing\n")
+	  (fail))
+	amb-tag))]))
+
 (define-syntax amb
   (syntax-rules ()
     [(_ value ...)
-     (call-with-current-continuation
-      (lambda (cont)
-	(debug-printf "amb: adding nodes\n")
-	(add-nodes!
-	 (amb-search-strategy)
-	 (list (thunk
-		 (debug-printf "Calling cont\n")
-		 (cont value)
-		 (debug-printf "Should never get here\n")) ...))
-	(debug-printf "amb: failing: strategy ~a\n" (amb-search-strategy))
-	(fail)
-	#;(error "Amb fell through?")
-	)
-      amb-tag)]))
+     (let/ambcc cont
+		(debug-printf "amb: adding nodes\n")
+		(add-nodes!
+		 (amb-search-strategy)
+		 (list (thunk
+			(debug-printf "Calling cont\n")
+			(cont value)
+			(debug-printf "Should never get here\n")) ...)))]))
 
 
 (define (amb-list lst)
-  (call-with-current-continuation
-   (lambda (cont)
-     (debug-printf "amb-list: adding nodes\n")
-     (add-nodes!
-      (amb-search-strategy)
-      (map (lambda (val)
-	     (thunk
-	      (debug-printf "Calling value cont\n")
-	      (cont (val))
-	      (debug-printf "Should never get here\n")))
-	   lst))
-     (debug-printf "amb-list: failing: strategy ~a\n"
-		   (amb-search-strategy))
-     (fail))
-   amb-tag))
+  (let/ambcc cont
+	     (define saved-var-hash (var-hash))
+	     (debug-printf "amb-list: adding nodes\n")
+	     (add-nodes!
+	      (amb-search-strategy)
+	      (map (lambda (val)
+		     (thunk
+		      (debug-printf "Calling value cont\n")
+		      (cont (parameterize ([var-hash saved-var-hash])
+			      (val)))
+		      (debug-printf "Should never get here\n")))
+		   lst))))
 
 ;;; Should behave identical to amb
 (define-syntax amb*
@@ -322,41 +343,32 @@
 ;;; Similar to amb-list, but does not expect thunks as arguments.
 ;;; This behaves differently when backtracking!
 (define (amb-list* lst)
-  (call-with-current-continuation
-   (lambda (cont)
-     (debug-printf "amb-list: adding nodes\n")
-     (add-nodes!
-      (amb-search-strategy)
-      (map (lambda (val)
-	     (thunk
-	      (debug-printf "Calling value cont\n")
-	      (cont val)
-	      (debug-printf "Should never get here\n")))
-	   lst))
-     (debug-printf "amb-list: failing: strategy ~a\n"
-		   (amb-search-strategy))
-     (fail))
-   amb-tag))
+  (let/ambcc cont
+	     (debug-printf "amb-list: adding nodes\n")
+	     (add-nodes!
+	      (amb-search-strategy)
+	      (map (lambda (val)
+		     (thunk
+		      (debug-printf "Calling value cont\n")
+		      (cont val)
+		      (debug-printf "Should never get here\n")))
+		   lst))))
 
+;;; What about saving the var-hash in this scenario?
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
-  (call-with-current-continuation
-   (lambda (cont)
-     (define strategy (amb-search-strategy))
-     (add-node!
-      strategy
-      (thunk
-	(debug-printf "Continuing after delivering a value\n")
-	(cont 'command-continuation)))
-     (add-node!
-      strategy
-      (thunk
-       (debug-printf "Delivering value ~a\n" value)
-       (abort/cc amb-tag 'deliver value)))
-     (fail)
-     #;(error "Deliver fell through?")
-     )
-   amb-tag)
+  (let/ambcc cont
+	     (define strategy (amb-search-strategy))
+	     (add-node!
+	      strategy
+	      (thunk
+	       (debug-printf "Continuing after delivering a value\n")
+	       (cont 'command-continuation)))
+	     (add-node!
+	      strategy
+	      (thunk
+	       (debug-printf "Delivering value ~a\n" value)
+	       (abort/cc amb-tag 'deliver value))))
   (void))
 
 (define (fail)
@@ -402,10 +414,8 @@
 		 (thunk
 		  (debug-printf "Returning Initial value\n")
 		  (abort/cc amb-tag 'deliver 
-			    ;; Cannot use `begin' here, since this
-			    ;; results in an error when body...
-			    ;; starts with a definition
-			    (let () body ...))))
+			    (let ()
+			      body ...))))
 		(fail))
 	      amb-tag)) amb-tag amb-handler))
 	  amb-abort-tag
