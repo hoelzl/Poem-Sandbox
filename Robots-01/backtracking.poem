@@ -33,6 +33,7 @@
 	 a-multiple-of a-factor-of
 	 an-element-of)
 
+(require "utils.poem")
 (require racket/control)
 (require data/queue)
 
@@ -247,19 +248,26 @@
 (defmethod add-node! ((strategy <ids>) k)
   (let ((new-node (maybe-make-ids-node strategy k)))
     (when new-node
-      (unless (initial-nodes strategy)
-	(setf! (initial-nodes strategy) (list new-node)))
       (setf! (nodes strategy)
 	     (list* new-node (nodes strategy))))))
+
+(defmethod add-initial-node! ([strategy <ids>] k)
+  (let ((new-node (maybe-make-ids-node strategy k)))
+    (assert new-node)
+    (setf! (initial-nodes strategy) (list new-node))
+    (setf! (nodes strategy) (list new-node))))
 
 (defmethod add-nodes! ((strategy <ids>) ns)
   ;; We suppose that the new nodes are all at the same depth
   (let ((new-nodes (maybe-make-ids-nodes strategy ns)))
     (when new-nodes
-      (unless (initial-nodes strategy)
-	(setf! (initial-nodes strategy) new-nodes))
       (setf! (nodes strategy)
 	     (append new-nodes (nodes strategy))))))
+
+#;
+(defmethod add-initial-nodes! ([strategy <ids>] ks)
+  (add-nodes! strategy ks)
+  (setf! (initial-nodes strategy) ks))
 
 
 ;;; Amb and friends
