@@ -34,6 +34,7 @@
 	 an-element-of)
 
 (require racket/control)
+(require data/queue)
 
 (define debugging? #f)
 (define (debug-printf . args)
@@ -41,56 +42,88 @@
     (apply printf args)))
 
 
-;;; Search strategies
+;;; Result Strategies
+;;; =================
 
 (defclass <result-strategy> ())
 
-;; Collect a result.  The value of direct? is #t if this result was
-;; directly aborted to the handler, #f otherwise.  Returns three values:
-;; * Should the result be collected?
-;; * Should the computation continue?
-;; * The real value for the computation, for strategies that have to
-;;   wrap nodes.
+;; Collect a result and returns true, if the computation should
+;; continue, falso otherwise.
 (defgeneric collect-result (strategy node))
+
+;; Notification that `fail' was called.  Currently mostly useful for
+;; tracing and debugging, but also intended for reinforcement
+;; learning.
 (defgeneric record-failure! (strategy))
 (defmethod record-failure! (strategy)
   ;; Do nothing.
   #f)
 
-(defclass <all-results-strategy> (<result-strategy>))
+;;; Return the results collected by the strategy as a list.
+(defgeneric result-list (strategy))
 
-(defmethod collect-result ((strategy <all-results-strategy>) node)
-  (values (not (eq? node (void))) #t node))
+(defclass <multi-result-strategy> (<result-strategy>)
+  (results :initializer (thunk (make-queue)))
+  :autoaccessors :slot
+  :auto #t)
 
-(defclass <one-result-strategy> (<result-strategy>))
-
-(defmethod collect-result ((strategy <one-result-strategy>) node)
+(defmethod collect-result ((strategy <multi-result-strategy>) node)
   (define node-is-void? (eq? node (void)))
-  (values (not node-is-void?) node-is-void? node))
+  (unless node-is-void?
+    (enqueue! (results strategy) node))
+  #t)
 
-(defclass <n-results-strategy> (<result-strategy>)
+(defmethod result-list ((strategy <multi-result-strategy>))
+  (queue->list (results strategy)))
+
+
+;;; Noting to implement, since the inherited default is already
+;;; sufficient.
+(defclass <all-results-strategy> (<multi-result-strategy>))
+
+
+(defclass <one-result-strategy> (<result-strategy>)
+  (result)
+  :autoaccessors :slot
+  :auto #t)
+
+(defmethod collect-result ([strategy <one-result-strategy>] node)
+  (define node-is-void? (eq? node (void)))
+  (cond [node-is-void?
+	 #t]
+	[else
+	 (setf! (result strategy) node)
+	 #f]))
+
+(defmethod result-list ([strategy <one-result-strategy>])
+  (list (result strategy)))
+
+(defclass <n-results-strategy> (<multi-result-strategy>)
   (number-of-results :initvalue 1)
   (number-of-results-so-far :initvalue 0)
   :auto #t
   :autoaccessors :slot)
 
 (defmethod collect-result ((strategy <n-results-strategy>) node)
-  ;; TODO: Check for void results
-  (inc! (number-of-results-so-far strategy))
-  (define continue?
-    (< (number-of-results-so-far strategy) (number-of-results strategy)))
-  (values #t
-	  continue?
-	  node))
+  (cond [(eq? node (void))
+	 #t]
+	[else
+	 (inc! (number-of-results-so-far strategy))
+	 (enqueue! (results strategy) node)
+	 (< (number-of-results-so-far strategy)
+	    (number-of-results strategy))]))
 
-(defclass <numeric-results-strategy> (<result-strategy>))
+
+(defclass <numeric-results-strategy> (<multi-result-strategy>))
 
 (defmethod collect-result ((strategy <numeric-results-strategy>) node)
-  (values (number? node) #t node))
+  (when (number? node)
+    (enqueue! (results strategy) node))
+  #t)
 
 
 (defclass <search-strategy> ()
-  (result-strategy :initvalue (make <all-results-strategy>))
+  (result-strategy :initializer (thunk (make <all-results-strategy>)))
   :auto #t
   :autoaccessors :slot)
 
@@ -106,6 +139,9 @@
 
 (defmethod collect-result ((strategy <search-strategy>) node)
   (collect-result (result-strategy strategy) node))
+
+(defmethod result-list ([strategy <search-strategy>])
+  (result-list (result-strategy strategy)))
 
 (defclass <list-search-strategy> (<search-strategy>)
   (nodes :initvalue '())
@@ -168,8 +204,8 @@
   (debug-printf "max-depth: ~a, curr-depth: ~a\n" 
 		(max-depth strategy) (curr-depth strategy))
   (if (= (max-depth strategy) (curr-depth strategy))
-      (call-next-method)
-      (values #f #t #f)))
+      (collect-result (result-strategy strategy) result)
+      #t))
 
 (defmethod next-node! ((strategy <ids>))
   (define ns (nodes strategy))
@@ -327,23 +363,15 @@
 (define-syntax collect
   (syntax-rules ()
     [(_ (search-strategy) body ...)
-     (let ([result '()])
+     (let ()
        (define (process-result res)
-	 (let-values ([(collect-it? continue? real-value)
-		       (collect-result (amb-search-strategy) res)])
-	   (debug-printf "Result ~a, collect-it? ~a\n"
-			 res collect-it?)
-	   (when collect-it?
-	     (debug-printf "Collecting result ~a\n" res)
-	     (set! result (list* res result)))
-	   (cond [continue?
-		  (debug-printf "Continuing\n")
-		  (call-with-continuation-prompt 
-		   fail amb-tag amb-handler)]
-		 [else
-		  (abort/cc amb-abort-tag)])
-	   #;(error "Fell through process-result?")
-	   ))
+	 (define continue? (collect-result (amb-search-strategy) res))
+	 (cond [continue?
+		(debug-printf "Continuing\n")
+		(call-with-continuation-prompt 
+		 fail amb-tag amb-handler)]
+	       [else
+		(abort/cc amb-abort-tag)]))
        (define (amb-handler kind value)
 	 (case kind
 	   [(cont)
@@ -353,9 +381,7 @@
 	      (process-result res))]
 	   [(deliver)
 	    (debug-printf "In collect/deliver: ~a\n" value)
-	    (process-result value)]
-	   #;(else (error "Fell through amb-handler."))
-	   ))
+	    (process-result value)]))
        (parameterize ([amb-search-strategy search-strategy])
 	 (call-with-continuation-prompt
 	  (thunk
@@ -375,8 +401,8 @@
 		(fail))
 	      amb-tag)) amb-tag amb-handler))
 	  amb-abort-tag
-	  (thunk (reverse result)))
-	 (reverse result)))]
+	  (thunk (result-list (amb-search-strategy))))
+	 (result-list (amb-search-strategy))))]
     [(_ () body ...)
      (collect ((make <dfs>)) body ...)]))
 
