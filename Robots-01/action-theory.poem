@@ -7,7 +7,7 @@
          actions
          current-situation
          do!
-	 copy-situation
+	 freeze-situation
          <logical-class>
          <logical-object>
          <action-type>
@@ -59,12 +59,23 @@
      (set-value! current-situation-var new-value)]))
 
 (define (do! action situation)
-  (define new-var (make <var>))
-  (set-value! new-var (cons action (actions situation)))
+  (define new-var (make <var> :value (cons action (actions situation))))
   (make-situation new-var))
 
-(define (copy-situation situation)
-  (make-situation (actions situation)))
+(defclass <frozen-situation> (<situation>)
+  (actions :initvalue '()))
+
+(defmethod actions ([sit <frozen-situation>])
+  (slot-ref sit 'actions))
+
+(defmethod set-actions! ([sit <frozen-situation>] new-actions)
+  (slot-set! sit 'actions new-actions))
+
+(define (freeze-situation situation)
+  (make <frozen-situation> :actions (actions situation)))
+
+(defmethod freeze ([sit <situation>])
+  (freeze-situation sit))
 
 (define all-fluent-names (make-hash))
 
@@ -295,5 +306,32 @@
 			       (map action->sexp (actions (current-situation))))
 		       (map action->sexp (actions (current-situation)))))))
   (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+	  (map action->sexp (actions (current-situation)))))
+
+
+(define (simple-example-03)
+  (printf "Initial situation: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (move 'r1 'initial-position)
+  (printf "Situation after moving: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (define results
+    (collect () (amb (begin
+		       (move 'r1 'pos1)
+		       (move 'r2 'pos2)
+		       (move 'r1 'pos3)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation))))
+		       (freeze (current-situation)))
+		     (begin
+		       (move 'r2 'pos2)
+		       (move 'r4 'pos1)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation))))
+		       (freeze (current-situation))))))
+  (printf "Results: ~a\n" (map (lambda (res)
+				 (map action->sexp (actions res)))
+			       results))
   (printf "Final situation: ~a\n"
 	  (map action->sexp (actions (current-situation)))))

@@ -3,6 +3,7 @@
 (provide <var>
 	 value set-value!
 	 with-saved-vars
+	 freeze
 
 	 <result-strategy>
 	 collect-result
@@ -72,6 +73,12 @@
     [(_ body ...)
      (parameterize ([var-hash (var-hash)])
        body ...)]))
+
+(defgeneric freeze (thing))
+(defmethod freeze (thing)
+  thing)
+(defmethod freeze ([var <var>])
+  (value var))
 
 
 ;;; Result Strategies
