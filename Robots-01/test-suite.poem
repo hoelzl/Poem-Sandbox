@@ -6,11 +6,14 @@
 (require "test-utils.poem")
 (require "test-backtracking.poem")
 (require "test-logic.poem")
+(require "test-action-theory.poem")
 
 (define-test-suite poem-suite
   utils-suite
+  var-suite
   amb-suite
-  logic-suite)
+  logic-suite
+  action-theory-suite)
 
 #||
 ;;; Text-based interface:

@@ -1,5 +1,7 @@
 #lang poem
 
+(require "backtracking.poem")
+
 (provide <situation>
          actions
          current-situation
@@ -40,10 +42,15 @@
                             (actions obj)))))))
 
 (defclass <situation> ()
-  (actions :initvalue empty)
+  (actions :initvalue (make <var>))
   :printer print-situation
-  :autoaccessors :slot
   :auto #t)
+
+(defmethod actions ([sit <situation>])
+  (value (actions sit)))
+
+(defmethod set-actions! ([sit-situation] new-actions)
+  (setf! (value (actions sit)) new-actions))
 
 (define current-situation (make-parameter (make <situation>)))
 

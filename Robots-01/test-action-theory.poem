@@ -1,0 +1,11 @@
+#lang poem
+
+(require rackunit)
+(require rackunit/text-ui)
+
+(provide action-theory-suite)
+
+(define-test-suite action-theory-suite
+
+  (test-case
+   "situation 1"))

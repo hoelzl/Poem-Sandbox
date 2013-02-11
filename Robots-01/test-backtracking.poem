@@ -4,9 +4,115 @@
 (require (rename-in rackunit (fail fail-test)))
 (require rackunit/text-ui)
 
-(provide amb-suite
+(provide var-suite
+	 amb-suite
 	 medium-amb-suite
 	 big-amb-suite)
+
+(define-test-suite var-suite
+  (test-case
+   "var 1"
+   (define var (make <var>))
+   (setf! (value var) 123)
+   (with-saved-vars
+    (setf! (value var) 234)
+    (check-equal? (value var) 234))
+   (check-equal? (value var) 123))
+  
+  ;; The following two test cases contain some hairy control flow, so
+  ;; I've left in some (commented out) `printf' statements that make
+  ;; it easy to verify that the expected things actually happen. --tc
+
+  (test-case
+   "var 2"
+   (define var (make <var>))
+   ;; (printf "var = 123\n")
+   (setf! (value var) 123)
+   (define cont #f)
+   (define count 0)
+   ;; (printf "Before saving vars\n")
+   (with-saved-vars
+    (begin
+      ;; (printf "In begin\n")
+      (setf! (value var) 234)
+      (let/cc k
+	      (set! cont k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 234))
+      (inc! count)
+      (when (count . > . 2)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 234\n")
+      (check-equal? (value var) 234)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)
+   (when (and cont (procedure? cont))
+     (begin
+       ;; (printf "Invoking cont\n")
+       (cont 'ignore)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123))
+
+  (test-case
+   "var 3"
+   (define var (make <var>))
+   ;; (printf "var = 123\n")
+   (setf! (value var) 123)
+   (define cont #f)
+   (define cont-1 #f)
+   (define cont-2 #f)
+   (define count 0)
+   (define (switch-cont!)
+     ;; (printf "Switching continuation\n")
+     (cond [(or (and (not cont) (count . < . 5)) (eq? cont cont-2))
+	    ;; (printf "Setting cont to cont-1\n")
+	    (set! cont cont-1)]
+	   [(eq? cont cont-1)
+	    ;; (printf "Setting cont to cont-2\n")
+	    (set! cont cont-2)]
+	   [else
+	    ;; (printf "Setting cont to #f\n")
+	    (set! cont #f)]))
+   ;; (printf "Before saving vars\n")
+   (with-saved-vars
+    (begin
+      ;; (printf "In begin 1\n")
+      (setf! (value var) 234)
+      (let/cc k
+	      (set! cont-1 k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 234))
+      (inc! count)
+      (when (count . > . 5)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 234\n")
+      (check-equal? (value var) 234)))
+   (with-saved-vars
+    (unless (eq? cont cont-1)
+      ;; (printf "In begin 2\n")
+      (setf! (value var) 345)
+      (let/cc k
+	      (set! cont-2 k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 345))
+      (inc! count)
+      (when (count . > . 5)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 345\n")
+      (check-equal? (value var) 345)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)
+   (switch-cont!)
+   (when (and cont (procedure? cont))
+     (begin
+       ;; (printf "Invoking cont\n")
+       (cont 'ignore)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)))
+
 
 (define-test-suite amb-suite
   (test-case

@@ -2,6 +2,7 @@
 
 (provide <var>
 	 value set-value!
+	 with-saved-vars
 
 	 <result-strategy>
 	 collect-result
@@ -58,6 +59,12 @@
 
 (defmethod set-value! ([var <var>] new-value)
   (var-hash (hash-set (var-hash) var new-value)))
+
+(define-syntax with-saved-vars
+  (syntax-rules ()
+    [(_ body ...)
+     (parameterize ([var-hash (var-hash)])
+       body ...)]))
 
 
 ;;; Result Strategies
@@ -298,7 +305,7 @@
 (define-syntax let/ambcc
   (syntax-rules ()
     [(_ cont body ...)
-     (parameterize ([var-hash (var-hash)])
+     (with-saved-vars
        (call-with-current-continuation
 	(lambda (cont)
 	  body ...
