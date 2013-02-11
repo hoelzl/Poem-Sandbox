@@ -54,6 +54,13 @@
 
 (defclass <var> ())
 
+(define no-initarg (list "No initarg"))
+
+(defaftermethod initialize ([var <var>] initargs)
+  (define value (getarg initargs :value no-initarg))
+  (unless (eq? value no-initarg)
+    (set-value! var value)))
+
 (defmethod value ([var <var>])
   (hash-ref (var-hash) var ???))
 

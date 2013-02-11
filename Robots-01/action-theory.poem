@@ -38,14 +38,9 @@
 ;;; the var.  The `initialize', `actions' and `set-actions!' methods
 ;;; should actually be generated automatically.
 (defclass <situation> ()
-  (actions :initvalue (make <var>))
+  (actions :initvalue (make <var> :value '()))
   :auto #t
   :autoaccessors #f)
-
-(defaftermethod initialize ([sit <situation>] initargs)
-  (define actions-val (slot-ref sit 'actions))
-  (when (eq? (value actions-val) ???)
-    (set-value! actions-val '())))
 
 (defmethod actions ([sit <situation>])
   (value (slot-ref sit 'actions)))
@@ -54,9 +49,7 @@
   (set-value! (slot-ref sit 'actions) new-actions))
 
 (define current-situation-var
-  (let ((var (make <var>)))
-    (set-value! var (make <situation>))
-    var))
+  (make <var> :value (make <situation>)))
 
 (define current-situation
   (case-lambda 
