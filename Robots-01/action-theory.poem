@@ -1,5 +1,6 @@
 #lang poem
 
+(require "utils.poem")
 (require "backtracking.poem")
 
 (provide <situation>
@@ -9,18 +10,20 @@
 	 copy-situation
          <logical-class>
          <logical-object>
-         <action>
+         <action-type>
+	 make-action-proc
          name
          parameters
          precondition
          effect-axiom
+	 proc-body
          assert
-         all-action-names
-         action-name? get-action
-         define-action
+         all-action-type-names
+         action-type-name? get-action-type
+         define-action-type
          @pre
-         <action-instance>
-         action
+         <action>
+         action-type
          arguments
          <fluent>
          axiom
@@ -28,34 +31,28 @@
          fluent-name? get-fluent
          define-fluent)
 
-;;; TODO: Fix printing.
-
-(define print-situation
-  (lambda (obj rec? &opt [port (current-output-port)])
-    (let ([printer (if rec? write-object display-object)])
-      (printer (format "#<situation: actions=~a>"
-                       (map (lambda (ai)
-                              (format "#<action-instance: ~a arguments=~a>"
-                                      (name (action ai))
-                                      (map (lambda (arg) (format "~a" arg))
-                                           (arguments ai))))
-                            (actions obj)))))))
-
 (defclass <situation> ()
   (actions :initvalue (make <var>))
-  :printer print-situation
-  :auto #t)
+  :auto #t
+  :autoaccessors #f)
+
+(defaftermethod initialize ([sit <situation>] initargs)
+  (define actions-val (slot-ref sit 'actions))
+  (when (eq? (value actions-val) ???)
+    (set-value! actions-val '())))
 
 (defmethod actions ([sit <situation>])
-  (value (actions sit)))
+  (value (slot-ref sit 'actions)))
 
-(defmethod set-actions! ([sit-situation] new-actions)
-  (setf! (value (actions sit)) new-actions))
+(defmethod set-actions! ([sit <situation>] new-actions)
+  (set-value! (slot-ref sit 'actions) new-actions))
 
 (define current-situation (make-parameter (make <situation>)))
 
 (define (do! action situation)
-  (make-situation (cons action (actions situation))))
+  (define new-var (make <var>))
+  (set-value! new-var (cons action (actions situation)))
+  (make-situation new-var))
 
 (define (copy-situation situation)
   (make-situation (actions situation)))
@@ -75,6 +72,7 @@
   :autoaccessors :slot
   :printer #t)
 
+;;; Maybe generate `name?' as a predicate for the fluent?
 (define (maybe-make-fluent name)
   (unless (hash-ref all-fluent-names name #f)
     (hash-set! all-fluent-names name (make-fluent name))))
@@ -85,6 +83,8 @@
 (defclass <logical-class> (<class>)
   :printer #t)
 
+;;; TODO: initialize slots with vars and generate getters and setters
+;;; similar to `actions' for <situation>.
 (defmethod compute-slots ([class <logical-class>])
   (let ([slots (call-next-method)])
     (for ([slot (in-list slots)])
@@ -96,63 +96,93 @@
 (defclass <logical-object> ()
   :printer #t)
 
-(define all-action-names (make-hash))
+(define all-action-type-names (make-hash))
 
-(define (action-name? name)
-  (and (hash-ref all-action-names name #f) #t))
+(define (action-type-name? name)
+  (and (hash-ref all-action-type-names name #f) #t))
 
-(define (get-action name)
-  (hash-ref all-action-names name))
+(define (get-action-type name)
+  (hash-ref all-action-type-names name))
 
-(defentityclass <action> ()
+(defentityclass <action-type> ()
   name
-  parameters
-  precondition
-  effect-axiom
+  (parameters :initivalue '())
+  (precondition :initvalue '())
+  (effect-axiom :initvalue '())
+  (proc-body :initvalue '())
   :printer #t
   :autoaccessors :slot
   :auto #t)
 
-(defmethod initialize ([action <action>] initargs)
-  (call-next-method)
-  (hash-set! all-action-names (name action) action))
+(define (make-action-proc action-name parameters precondition body)
+  #`(lambda #,parameters
+      (assert #,precondition)
+      (current-situation (do! (make-action
+			       #,action-name (list #,@parameters))
+			      (current-situation)))
+      . #,body))
 
-(defclass <action-instance> ()
-  action
+(define-for-syntax (make-action-proc action-name parameters precondition body)
+  `(lambda ,parameters
+      (assert ,precondition)
+      (current-situation (do! (make-action
+			       ,action-name (list ,@parameters))
+			      (current-situation)))
+      ,@body))
+
+(defaftermethod initialize ([action <action-type>] initargs)
+  (hash-set! all-action-type-names (name action) action)
+  #;
+  (set-instance-proc! act (make-action-proc action)))
+
+(defclass <action> ()
+  action-type
   arguments
   :printer #t
   :autoaccessors :slot
   :auto #t)
 
-(define-syntax-rule (assert expression ...)
-  (unless (begin expression ...)
-    (error "Assertion failed: " '(assert expression ...))))
+(defmethod add-action! ([sit <situation>] [act <action>])
+  (set-actions! sit (list* act (actions sit))))
 
-(define (convert-to-axiom lst)
-  'nyi)
+(defmethod name ([act <action>])
+  (name (action-type act)))
 
-(define-syntax define-action
+(defmethod signature ([act <action>])
+  (signature (action-tyep act)))
+
+(define (convert-to-axiom id args precondition body)
+  body)
+
+(define-syntax define-action-type
   (lambda (stx)
     (syntax-case stx ()
-      [(_ id exp1
-          :precondition exp2
+      [(_ id args
+          :precondition precondition
           exp ...)
        #'(define id
-           (let ([act (make <action>
+           (let ([act (make <action-type>
                         :name 'id
-                        :parameters 'exp1
-                        :precondition 'exp2
-                        :effect-axiom (convert-to-axiom '(exp ...)))])
-             (set-instance-proc! act
-                                 (lambda exp1
-                                   (assert exp2)
-                                   (current-situation (do! (make-action-instance
-                                                            act (list . exp1))
-                                                           (current-situation)))
-                                   exp ... ))
+                        :parameters 'args
+                        :precondition 'precondition
+			:proc-body '(exp ...)
+                        :effect-axiom (convert-to-axiom
+				       'id 'args 'precondition '(exp ...)))])
+	     (set-instance-proc! 
+	      act
+	      (lambda args
+		; (assert precondition)
+		(current-situation (do! (make-action
+					 id (list . args))
+					(current-situation)))
+		(printf "Action: ~a\n" (make-action id (list . args)))
+		(printf "Situation: ~a\n" (do! (make-action
+						id (list . args))
+					       (current-situation)))
+		exp ...))
              act))]
-      [(_ id exp1 exp ...)
-       #'(define-action id exp1 :precondition true exp ...)])))
+      [(_ id args exp ...)
+       #'(define-action-type id args :precondition true exp ...)])))
 
 (define (@pre exp)
   exp)
@@ -177,11 +207,11 @@
 
 #||
 ;; (generate-successor-state-axiom-for-fluent position)
-(effect-axiom (get-action 'move))
+(effect-axiom (get-action-type 'move))
   => (equals? (position obj) pos)
 (make-successor-state-part '(position obj (do (move obj pos) sit))
                            'pos)
-(effect-axiom (get-action 'move-up))
+(effect-axiom (get-action-type 'move-up))
   => (equals? (position obj)
               (make-position (@pre (x (position obj)))
                              (+ 1 (@pre (y (position obj))))))
@@ -195,7 +225,7 @@
     (build-successor-state-axiom-from-parts parts)))
 
 (define (generate-successor-state-parts-for-fluent fluent-name)
-  (for/list ([(action-name action) (in-hash all-action-names)])
+  (for/list ([(action-type-name action) (in-hash all-action-type-names)])
     (let-values ([(relevant? new-formula previous-formula)
                   (extract-successor-state-parts action fluent-name)])
       ; #:break (not relevant?)
@@ -207,3 +237,46 @@
 (define (extract-successor-state-parts action fluent-name)
   #f)
 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; Some tests for interactive debugging
+;;; Delete when the test suite runs
+
+
+(define fluent-1 (make <fluent>
+		   :name 'fluent-1
+		   :axiom '(foo)))
+
+
+(define move-action (make <action-type>
+		      :name 'move
+		      :parameters '(robot pos)
+		      :precondition '(not (exists (r <robot>)
+						  (and (not (equal? robot r))
+						       (equal? (position-of r now) pos))))
+		      :effect-axiom '(equal? (position-of robot (do! (move robot pos) now))
+					     pos)
+		      :proc-body '((setf! (position-of robot (do! (move robot pos) now))
+					   pos))))
+
+
+(define test-action-1 (make <action-type>
+			:name 'test-action-1
+			:parameters '(arg1)
+			:precondition '(number? arg1)
+			:effect-axiom '()))
+
+(define test-action-2 (make <action-type>
+			:name 'test-action-2
+			:parameters '(arg1 arg2)
+			:precondition '()
+			:effect-axiom '()))
+
+#;
+(pretty-print
+ (syntax->datum (make-action-proc (name move-action)
+				  (parameters move-action)
+				  (precondition move-action)
+				  (proc-body move-action))))
