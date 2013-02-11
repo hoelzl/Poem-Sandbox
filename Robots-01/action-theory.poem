@@ -31,6 +31,12 @@
          fluent-name? get-fluent
          define-fluent)
 
+
+;;; The `actions' slot of <situation> is preserved by bactracking
+;;; search.  Therefore it is kept constant as a <var> instance, the
+;;; actual values are managed by setting or retreiving the value of
+;;; the var.  The `initialize', `actions' and `set-actions!' methods
+;;; should actually be generated automatically.
 (defclass <situation> ()
   (actions :initvalue (make <var>))
   :auto #t
@@ -47,7 +53,17 @@
 (defmethod set-actions! ([sit <situation>] new-actions)
   (set-value! (slot-ref sit 'actions) new-actions))
 
-(define current-situation (make-parameter (make <situation>)))
+(define current-situation-var
+  (let ((var (make <var>)))
+    (set-value! var (make <situation>))
+    var))
+
+(define current-situation
+  (case-lambda 
+    [()
+     (value current-situation-var)]
+    [(new-value)
+     (set-value! current-situation-var new-value)]))
 
 (define (do! action situation)
   (define new-var (make <var>))
@@ -135,6 +151,9 @@
   #;
   (set-instance-proc! act (make-action-proc action)))
 
+(defmethod signature ([act <action-type>])
+  (list* (name act) (parameters act)))
+
 (defclass <action> ()
   action-type
   arguments
@@ -149,7 +168,10 @@
   (name (action-type act)))
 
 (defmethod signature ([act <action>])
-  (signature (action-tyep act)))
+  (signature (action-type act)))
+
+(defmethod action->sexp ([act <action>])
+  (list* (name act) (arguments act)))
 
 (define (convert-to-axiom id args precondition body)
   body)
@@ -175,10 +197,6 @@
 		(current-situation (do! (make-action
 					 id (list . args))
 					(current-situation)))
-		(printf "Action: ~a\n" (make-action id (list . args)))
-		(printf "Situation: ~a\n" (do! (make-action
-						id (list . args))
-					       (current-situation)))
 		exp ...))
              act))]
       [(_ id args exp ...)
@@ -238,45 +256,51 @@
   #f)
 
 
+(define-action-type move (robot pos)
+  (printf "Moving robot ~a to position ~a\n" robot pos))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
-;;; Some tests for interactive debugging
-;;; Delete when the test suite runs
+(define (simple-example-01)
+  (printf "Initial situation: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (move 'r1 'initial-position)
+  (printf "Situation after moving: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (define results
+    (collect () (amb (begin
+		       (move 'r1 'pos1)
+		       (move 'r2 'pos2)
+		       (move 'r1 'pos3)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation)))))
+		     (begin
+		       (move 'r2 'pos2)
+		       (move 'r4 'pos1)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation))))))))
+  (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+	  (map action->sexp (actions (current-situation)))))
 
-
-(define fluent-1 (make <fluent>
-		   :name 'fluent-1
-		   :axiom '(foo)))
-
-
-(define move-action (make <action-type>
-		      :name 'move
-		      :parameters '(robot pos)
-		      :precondition '(not (exists (r <robot>)
-						  (and (not (equal? robot r))
-						       (equal? (position-of r now) pos))))
-		      :effect-axiom '(equal? (position-of robot (do! (move robot pos) now))
-					     pos)
-		      :proc-body '((setf! (position-of robot (do! (move robot pos) now))
-					   pos))))
-
-
-(define test-action-1 (make <action-type>
-			:name 'test-action-1
-			:parameters '(arg1)
-			:precondition '(number? arg1)
-			:effect-axiom '()))
-
-(define test-action-2 (make <action-type>
-			:name 'test-action-2
-			:parameters '(arg1 arg2)
-			:precondition '()
-			:effect-axiom '()))
-
-#;
-(pretty-print
- (syntax->datum (make-action-proc (name move-action)
-				  (parameters move-action)
-				  (precondition move-action)
-				  (proc-body move-action))))
+(define (simple-example-02)
+  (printf "Initial situation: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (move 'r1 'initial-position)
+  (printf "Situation after moving: ~a\n"
+	  (map action->sexp (actions (current-situation))))
+  (define results
+    (collect () (amb (begin
+		       (move 'r1 'pos1)
+		       (move 'r2 'pos2)
+		       (move 'r1 'pos3)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation))))
+		       (map action->sexp (actions (current-situation))))
+		     (begin
+		       (move 'r2 'pos2)
+		       (move 'r4 'pos1)
+		       (printf "Situation: ~a\n"
+			       (map action->sexp (actions (current-situation))))
+		       (map action->sexp (actions (current-situation)))))))
+  (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+	  (map action->sexp (actions (current-situation)))))

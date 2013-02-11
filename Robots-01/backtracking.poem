@@ -322,7 +322,8 @@
 		 (amb-search-strategy)
 		 (list (thunk
 			(debug-printf "Calling cont\n")
-			(cont value)
+			(with-saved-vars
+			 (cont value))
 			(debug-printf "Should never get here\n")) ...)))]))
 
 
@@ -414,17 +415,15 @@
 	  (thunk
 	   (call-with-continuation-prompt
 	    (thunk
-	     (call-with-current-continuation
-	      (lambda (cont)
-		(add-initial-node!
-		 (amb-search-strategy)
-		 (thunk
-		  (debug-printf "Returning Initial value\n")
-		  (abort/cc amb-tag 'deliver 
-			    (let ()
-			      body ...))))
-		(fail))
-	      amb-tag)) amb-tag amb-handler))
+	     (let/ambcc cont
+	       (add-initial-node!
+		(amb-search-strategy)
+		(thunk
+		 (debug-printf "Returning Initial value\n")
+		 (abort/cc amb-tag 'deliver 
+			   (let ()
+			     body ...))))))
+	    amb-tag amb-handler))
 	  amb-abort-tag
 	  (thunk (result-list (amb-search-strategy))))
 	 (result-list (amb-search-strategy))))]
