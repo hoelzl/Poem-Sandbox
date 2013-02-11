@@ -412,22 +412,32 @@
   ;;   (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
   ;; 	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
   
-
   (test-case
    "Amb Test 30"
    (define v (make <var>))
    (check-equal?
     (collect ((make <ids>))
-	     (deliver (amb (begin (setf! (value v) 'a) 'a)
-			   (begin (setf! (value v) 'b) 'b)))
-	     (deliver (amb (if (equal? (value v) 'a) 1 11)
-			   (if (equal? (value v) 'a) 2 22)
-			   (if (equal? (value v) 'a) 3 33)))
+	     (deliver (amb (begin (setf! (value v) 'a)
+				  (deliver (amb (if (equal? (value v) 'a) 1 11)
+						(if (equal? (value v) 'a) 2 22)
+						(if (equal? (value v) 'a) 3 33)))
+				  'a)
+			   (begin (setf! (value v) 'b)
+				  (deliver (amb (if (equal? (value v) 'a) 1 11)
+						(if (equal? (value v) 'a) 2 22)
+						(if (equal? (value v) 'a) 3 33)))
+				  'b)))
 	     (amb 'foo (value v) 'bar)) 
-    '(a b                               ; level 1 a/b
-      1 2 3 11 22 33                    ; level 2 a/b
-      foo a bar foo a bar foo a bar     ; level 3 a
-      foo b bar foo b bar foo b bar)))  ; level 3 b
+    '(  1   2   3
+       11  22  33
+        a   a   a
+        b   b   b
+      foo   b bar
+      foo   b bar
+      foo   b bar
+      foo   b bar
+      foo   b bar
+      foo   b bar)))
 )
 
 (define-test-suite medium-amb-suite
@@ -490,4 +500,3 @@
   	      (>= (+ x y) 7))
   	 (list x y)
   	 (fail))))))
-

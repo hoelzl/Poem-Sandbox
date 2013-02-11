@@ -330,30 +330,35 @@
 (define-syntax amb
   (syntax-rules ()
     [(_ value ...)
-     (let/ambcc cont
-		(debug-printf "amb: adding nodes\n")
-		(add-nodes!
-		 (amb-search-strategy)
-		 (list (thunk
-			(debug-printf "Calling cont\n")
-			(with-saved-vars
-			 (cont value))
-			(debug-printf "Should never get here\n")) ...)))]))
-
+     (let/ambcc 
+      cont
+      (define saved-var-hash (var-hash))
+      (debug-printf "amb: adding nodes\n")
+      (add-nodes!
+       (amb-search-strategy)
+       (list (thunk
+	      (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
+	      (var-hash saved-var-hash)
+	      (debug-printf "Calling cont\n")
+	      (cont value)
+	      (debug-printf "Should never get here\n")) ...)))]))
 
 (define (amb-list lst)
-  (let/ambcc cont
-	     (define saved-var-hash (var-hash))
-	     (debug-printf "amb-list: adding nodes\n")
-	     (add-nodes!
-	      (amb-search-strategy)
-	      (map (lambda (val)
-		     (thunk
-		      (debug-printf "Calling value cont\n")
-		      (cont (parameterize ([var-hash saved-var-hash])
-			      (val)))
-		      (debug-printf "Should never get here\n")))
-		   lst))))
+  (let/ambcc
+   cont
+   (define saved-var-hash (var-hash))
+   (debug-printf "amb-list: adding nodes\n")
+   (add-nodes!
+    (amb-search-strategy)
+    (map (lambda (val)
+	   (thunk
+	    (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
+	    (var-hash saved-var-hash)
+	    (debug-printf "Calling value cont\n")
+	    (cont (val))
+	    (debug-printf "Should never get here\n")))
+	 lst))))
+
 
 ;;; Should behave identical to amb
 (define-syntax amb*
@@ -380,15 +385,20 @@
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
   (let/ambcc cont
+	     (define saved-var-hash (var-hash))
 	     (define strategy (amb-search-strategy))
 	     (add-node!
 	      strategy
 	      (thunk
+	       (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
+	       (var-hash saved-var-hash)
 	       (debug-printf "Continuing after delivering a value\n")
 	       (cont 'command-continuation)))
 	     (add-node!
 	      strategy
 	      (thunk
+	       (debug-printf "Resoring var-hash\n")
+	       (var-hash saved-var-hash)
 	       (debug-printf "Delivering value ~a\n" value)
 	       (abort/cc amb-tag 'deliver value))))
   (void))
@@ -410,16 +420,18 @@
 	 (define continue? (collect-result (amb-search-strategy) res))
 	 (cond [continue?
 		(debug-printf "Continuing\n")
-		(call-with-continuation-prompt 
-		 fail amb-tag amb-handler)]
+		(with-saved-vars
+		 (call-with-continuation-prompt 
+		  fail amb-tag amb-handler))]
 	       [else
 		(abort/cc amb-abort-tag)]))
        (define (amb-handler kind value)
 	 (case kind
 	   [(cont)
 	    (debug-printf "In collect/cont 1: ~a\n" value)
-	    (let ([res (call-with-continuation-prompt 
-			value amb-tag amb-handler)])
+	    (let ([res (with-saved-vars
+			(call-with-continuation-prompt 
+			 value amb-tag amb-handler))])
 	      (process-result res))]
 	   [(deliver)
 	    (debug-printf "In collect/deliver: ~a\n" value)
@@ -435,7 +447,7 @@
 		(thunk
 		 (debug-printf "Returning Initial value\n")
 		 (abort/cc amb-tag 'deliver 
-			   (let ()
+			   (with-saved-vars
 			     body ...))))))
 	    amb-tag amb-handler))
 	  amb-abort-tag

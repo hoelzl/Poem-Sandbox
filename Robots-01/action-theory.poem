@@ -103,15 +103,26 @@
 (defclass <logical-class> (<class>)
   :printer #t)
 
+(define (compute-slots-for-fluent-class class slots)
+  (for/list ([slot (in-list slots)])
+    (cond [(getarg (rest slot) :fluent #f)
+	   ;; (printf "Creating fluent ~a\n" (first slot))
+	   (maybe-make-fluent (first slot))
+	   (list* (first slot)
+		  :initializer (thunk (make <var>))
+		  (rest slot))]
+	  [slot])))
+
 ;;; TODO: initialize slots with vars and generate getters and setters
 ;;; similar to `actions' for <situation>.
 (defmethod compute-slots ([class <logical-class>])
-  (let ([slots (call-next-method)])
-    (for ([slot (in-list slots)])
-      (when (getarg (rest slot) :fluent #f)
-        ;; (printf "Creating fluent ~a\n" (first slot))
-        (maybe-make-fluent (first slot))))
-    slots))
+  (compute-slots-for-fluent-class class (call-next-method)))
+
+(define-syntax (make-fluent-accessors stx)
+  (syntax-case stx ()
+    [(_ class name)
+     #'(defmethod name ([self class])
+	 (value (slot-ref self 'name)))]))
 
 (defclass <logical-object> ()
   :printer #t)
@@ -264,6 +275,7 @@
   (printf "Moving robot ~a to position ~a\n" robot pos))
 
 (define (simple-example-01)
+  (current-situation (make <situation>))
   (printf "Initial situation: ~a\n"
 	  (map action->sexp (actions (current-situation))))
   (move 'r1 'initial-position)
@@ -286,6 +298,7 @@
 	  (map action->sexp (actions (current-situation)))))
 
 (define (simple-example-02)
+  (current-situation (make <situation>))
   (printf "Initial situation: ~a\n"
 	  (map action->sexp (actions (current-situation))))
   (move 'r1 'initial-position)
@@ -311,6 +324,7 @@
 
 
 (define (simple-example-03)
+  (current-situation (make <situation>))
   (printf "Initial situation: ~a\n"
 	  (map action->sexp (actions (current-situation))))
   (move 'r1 'initial-position)
