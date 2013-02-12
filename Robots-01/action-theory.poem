@@ -8,6 +8,7 @@
          current-situation
          do!
 	 freeze-situation
+
          <logical-class>
          <logical-object>
          <action-type>
@@ -22,9 +23,14 @@
          action-type-name? get-action-type
          define-action-type
          @pre
+
          <action>
          action-type
          arguments
+	 add-action!
+	 signature
+	 data->sexp
+
          <fluent>
          axiom
          all-fluent-names
@@ -185,8 +191,13 @@
 (defmethod signature ([act <action>])
   (signature (action-type act)))
 
-(defmethod action->sexp ([act <action>])
-  (list* (name act) (arguments act)))
+(defgeneric data->sexp (thing))
+
+(defmethod data->sexp (thing)
+  thing)
+
+(defmethod data->sexp ([act <action>])
+  (list* (name act) (map data->sexp (arguments act))))
 
 (define (convert-to-axiom id args precondition body)
   body)
@@ -269,83 +280,3 @@
 
 (define (extract-successor-state-parts action fluent-name)
   #f)
-
-
-(define-action-type move (robot pos)
-  (printf "Moving robot ~a to position ~a\n" robot pos))
-
-(define (simple-example-01)
-  (current-situation (make <situation>))
-  (printf "Initial situation: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (move 'r1 'initial-position)
-  (printf "Situation after moving: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (define results
-    (collect () (amb (begin
-		       (move 'r1 'pos1)
-		       (move 'r2 'pos2)
-		       (move 'r1 'pos3)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation)))))
-		     (begin
-		       (move 'r2 'pos2)
-		       (move 'r4 'pos1)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation))))))))
-  (printf "Results: ~a\n" results)
-  (printf "Final situation: ~a\n"
-	  (map action->sexp (actions (current-situation)))))
-
-(define (simple-example-02)
-  (current-situation (make <situation>))
-  (printf "Initial situation: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (move 'r1 'initial-position)
-  (printf "Situation after moving: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (define results
-    (collect () (amb (begin
-		       (move 'r1 'pos1)
-		       (move 'r2 'pos2)
-		       (move 'r1 'pos3)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation))))
-		       (map action->sexp (actions (current-situation))))
-		     (begin
-		       (move 'r2 'pos2)
-		       (move 'r4 'pos1)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation))))
-		       (map action->sexp (actions (current-situation)))))))
-  (printf "Results: ~a\n" results)
-  (printf "Final situation: ~a\n"
-	  (map action->sexp (actions (current-situation)))))
-
-
-(define (simple-example-03)
-  (current-situation (make <situation>))
-  (printf "Initial situation: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (move 'r1 'initial-position)
-  (printf "Situation after moving: ~a\n"
-	  (map action->sexp (actions (current-situation))))
-  (define results
-    (collect () (amb (begin
-		       (move 'r1 'pos1)
-		       (move 'r2 'pos2)
-		       (move 'r1 'pos3)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation))))
-		       (freeze (current-situation)))
-		     (begin
-		       (move 'r2 'pos2)
-		       (move 'r4 'pos1)
-		       (printf "Situation: ~a\n"
-			       (map action->sexp (actions (current-situation))))
-		       (freeze (current-situation))))))
-  (printf "Results: ~a\n" (map (lambda (res)
-				 (map action->sexp (actions res)))
-			       results))
-  (printf "Final situation: ~a\n"
-	  (map action->sexp (actions (current-situation)))))
