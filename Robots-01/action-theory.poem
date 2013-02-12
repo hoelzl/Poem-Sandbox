@@ -5,6 +5,7 @@
 
 (provide <situation>
          actions
+	 variable-values variable-value set-variable-value!
          current-situation
          do!
 	 freeze-situation
@@ -45,6 +46,7 @@
 ;;; should actually be generated automatically.
 (defclass <situation> ()
   (actions :initvalue (make <var> :value '()))
+  (variable-values :initvalue (make <var> :value (make-immutable-hasheq)))
   :auto #t
   :autoaccessors #f)
 
@@ -53,6 +55,17 @@
 
 (defmethod set-actions! ([sit <situation>] new-actions)
   (set-value! (slot-ref sit 'actions) new-actions))
+
+(defmethod variable-values ([sit <situation>])
+  (slot-ref sit 'variable-values))
+
+(defmethod variable-value ([sit <situation>] var-desc &optional [default #f])
+  (hash-ref (value (slot-ref sit 'variable-values)) var-desc default))
+
+(defmethod set-variable-value! ([sit <situation>] var-desc new-value)
+  (set-value! (slot-ref sit 'variable-values)
+	      (hash-set (value (slot-ref sit 'variable-values))
+			var-desc new-value)))
 
 (define current-situation-var
   (make <var> :value (make <situation>)))
@@ -124,6 +137,7 @@
 (defmethod compute-slots ([class <logical-class>])
   (compute-slots-for-fluent-class class (call-next-method)))
 
+#;
 (define-syntax (make-fluent-accessors stx)
   (syntax-case stx ()
     [(_ class name)

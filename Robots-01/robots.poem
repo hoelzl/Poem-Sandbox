@@ -32,9 +32,19 @@
 (defclass <physical-object> (<logical-object>)
   (name)
   (position :initvalue (make-pos 0 0) :fluent #t)
-  :autoaccessors :slot
+  :autoaccessors #f
   :auto #t
   :metaclass <logical-class>)
+
+(defmethod name ([obj <physical-object>])
+  (slot-ref obj 'name))
+
+(defmethod position ([obj <physical-object>])
+  (variable-value (current-situation) (slot-ref obj 'position)))
+
+(defmethod set-position! ([obj <physical-object>] new-value)
+  (set-variable-value!
+   (current-situation) (slot-ref obj 'position) new-value))
 
 (defmethod data->sexp ([obj <physical-object>])
   (name obj))
@@ -101,21 +111,35 @@
     (collect () (amb (begin
 		       (printf "First branch\n")
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (move r1 (pos 1 1))
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (move r2 (pos 0 2))
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (move r1 (pos 1 2))
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (printf "Situation: ~a\n"
 			       (map data->sexp (actions (current-situation)))))
 		     (begin
 		       (printf "Second branch\n")
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (move r2 (pos 2 3))
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (move r3 (pos 1 1))
 		       (printf "Position of r1: ~a\n" (position r1))
+		       (printf "Position of r2: ~a\n" (position r2))
+		       (printf "Position of r3: ~a\n" (position r3))
 		       (printf "Situation: ~a\n"
 			       (map data->sexp (actions (current-situation))))))))
   (printf "Position of r1: ~a\n" (position r1))
