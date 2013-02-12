@@ -206,3 +206,56 @@
   (printf "Results: ~a\n" results)
   (printf "Final situation: ~a\n"
 	  (map data->sexp (actions (current-situation)))))
+
+
+(define (simple-example-04)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+	  (map data->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+	  (map data->sexp (actions (current-situation))))
+  (define results
+    (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
+	     (amb (begin
+		    (printf "First branch\n")
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (move r1 (pos 1 1))
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (move r2 (pos 0 2))
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (move r1 (pos 1 2))
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (printf "Situation: ~a\n"
+			    (map data->sexp (actions (current-situation)))))
+		  (begin
+		    (printf "Second branch\n")
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (move r2 (pos 2 3))
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (move r3 (pos 1 1))
+		    (printf "Position of r1: ~a\n" (position r1))
+		    (printf "Position of r2: ~a\n" (position r2))
+		    (printf "Position of r3: ~a\n" (position r3))
+		    (printf "Situation: ~a\n"
+			    (map data->sexp (actions (current-situation))))
+		    'ok))))
+  (printf "Position of r1: ~a\n" (position r1))
+  (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+	  (map data->sexp (actions (current-situation)))))

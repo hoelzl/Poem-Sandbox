@@ -9,6 +9,7 @@
          current-situation
          do!
 	 freeze-situation
+	 <commit-result-strategy>
 
          <logical-class>
          <logical-object>
@@ -95,6 +96,29 @@
 
 (defmethod freeze ([sit <situation>])
   (freeze-situation sit))
+
+
+(defclass <commit-result-strategy> (<one-result-strategy>)
+  (saved-situation)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ([strategy <commit-result-strategy>] node)
+  (define node-is-void? (eq? node (void)))
+  (cond [node-is-void?
+	 #t]
+	[else
+	 (setf! (result strategy) node)
+	 (setf! (saved-situation strategy) (freeze (current-situation)))
+	 #f]))
+
+(defmethod after-collection-hook ([strategy <commit-result-strategy>])
+  ;; (printf "Committing situation\n")
+  (current-situation (saved-situation strategy)))
+
+
+;;; Fluents
+;;; =======
 
 (define all-fluent-names (make-hash))
 

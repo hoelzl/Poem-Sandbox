@@ -7,9 +7,11 @@
 
 	 <result-strategy>
 	 collect-result
-	 <all-results-strategy> <one-result-strategy>
-	 <n-results-strategy>
 	 record-failure!
+	 after-collection-hook
+	 <all-results-strategy> <one-result-strategy>
+	 results set-results! result set-result!
+	 <n-results-strategy>
 	 number-of-results number-of-results-so-far
 	 <numeric-results-strategy>
 	 
@@ -100,6 +102,10 @@
   ;; (inc! number-of-failures)
   #f)
 
+(defgeneric after-collection-hook (strategy))
+(defmethod after-collection-hook (strategy)
+  #f)
+
 ;;; Return the results collected by the strategy as a list.
 (defgeneric result-list (strategy))
 
@@ -180,6 +186,9 @@
 
 (defmethod collect-result ([strategy <search-strategy>] node)
   (collect-result (result-strategy strategy) node))
+
+(defmethod after-collection-hook ([strategy <search-strategy>])
+  (after-collection-hook (result-strategy strategy)))
 
 (defmethod result-list ([strategy <search-strategy>])
   (result-list (result-strategy strategy)))
@@ -451,8 +460,15 @@
 			     body ...))))))
 	    amb-tag amb-handler))
 	  amb-abort-tag
-	  (thunk (result-list (amb-search-strategy))))
-	 (result-list (amb-search-strategy))))]
+	  (thunk
+	   (debug-printf "Exiting 1\n")
+	   (define current-strategy (amb-search-strategy))
+	   (after-collection-hook current-strategy)
+	   (result-list current-strategy)))
+	 (debug-printf "Exiting 1\n")
+	 (define current-strategy (amb-search-strategy))
+	 (after-collection-hook current-strategy)
+	 (result-list current-strategy)))]
     [(_ () body ...)
      (collect ((make <dfs>)) body ...)]))
 
