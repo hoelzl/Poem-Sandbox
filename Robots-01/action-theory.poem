@@ -233,7 +233,7 @@
 	     (set-instance-proc! 
 	      act
 	      (lambda args
-		; (assert precondition)
+		(assert precondition)
 		(current-situation (do! (make-action
 					 id (list . args))
 					(current-situation)))
