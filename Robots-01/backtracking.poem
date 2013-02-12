@@ -32,7 +32,7 @@
 	 need-deepening? set-need-deepening?!
 
 	 collect
-	 amb amb* deliver fail
+	 amb amb* deliver fail ensure
 	 amb-list amb-list*
 
 	 an-integer->= an-integer-<= 
@@ -420,6 +420,11 @@
   (if cc
       (abort/cc amb-tag 'cont cc)
       (abort/cc amb-abort-tag)))
+
+(define (ensure pred)
+  (unless pred
+    (fail))
+  #t)
 
 (define-syntax collect
   (syntax-rules ()

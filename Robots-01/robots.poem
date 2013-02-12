@@ -4,7 +4,7 @@
 (require "action-theory.poem")
 
 (provide <pos> x y pos? make-pos
-         <physical-object> position physical-object? 
+         <physical-object> position physical-object? position-known?
          <brick> weight brick? make-brick
          <robot> name max-load loaded-bricks robot? make-robot
          available-load
@@ -35,6 +35,9 @@
   :autoaccessors #f
   :auto #t
   :metaclass <logical-class>)
+
+(defmethod position-known? ([obj <physical-object>])
+  (and (position obj) #t))
 
 (defmethod name ([obj <physical-object>])
   (slot-ref obj 'name))
@@ -102,6 +105,10 @@
   (define r1 (make <robot> :name 'r1))
   (define r2 (make <robot> :name 'r2))
   (define r3 (make <robot> :name 'r3))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (position r1))
+    (printf "Position of r2: ~a\n" (position r2))
+    (printf "Position of r3: ~a\n" (position r3)))
   (printf "Initial situation: ~a\n"
 	  (map data->sexp (actions (current-situation))))
   (move r1 (pos 0 0))
@@ -110,36 +117,22 @@
   (define results
     (collect () (amb (begin
 		       (printf "First branch\n")
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (move r1 (pos 1 1))
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (move r2 (pos 0 2))
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (move r1 (pos 1 2))
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (printf "Situation: ~a\n"
 			       (map data->sexp (actions (current-situation)))))
 		     (begin
 		       (printf "Second branch\n")
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (move r2 (pos 2 3))
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (move r3 (pos 1 1))
-		       (printf "Position of r1: ~a\n" (position r1))
-		       (printf "Position of r2: ~a\n" (position r2))
-		       (printf "Position of r3: ~a\n" (position r3))
+		       (print-positions)
 		       (printf "Situation: ~a\n"
 			       (map data->sexp (actions (current-situation))))))))
   (printf "Position of r1: ~a\n" (position r1))
@@ -218,44 +211,91 @@
   (move r1 (pos 0 0))
   (printf "Situation after moving: ~a\n"
 	  (map data->sexp (actions (current-situation))))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (position r1))
+    (printf "Position of r2: ~a\n" (position r2))
+    (printf "Position of r3: ~a\n" (position r3)))
   (define results
     (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
 	     (amb (begin
 		    (printf "First branch\n")
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (move r1 (pos 1 1))
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (move r2 (pos 0 2))
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (move r1 (pos 1 2))
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (printf "Situation: ~a\n"
 			    (map data->sexp (actions (current-situation)))))
 		  (begin
 		    (printf "Second branch\n")
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (move r2 (pos 2 3))
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (move r3 (pos 1 1))
-		    (printf "Position of r1: ~a\n" (position r1))
-		    (printf "Position of r2: ~a\n" (position r2))
-		    (printf "Position of r3: ~a\n" (position r3))
+		    (print-positions)
 		    (printf "Situation: ~a\n"
 			    (map data->sexp (actions (current-situation))))
 		    'ok))))
-  (printf "Position of r1: ~a\n" (position r1))
+  (print-positions)
   (printf "Results: ~a\n" results)
   (printf "Final situation: ~a\n"
 	  (map data->sexp (actions (current-situation)))))
+
+
+(define (simple-example-05)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+	  (map data->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+	  (map data->sexp (actions (current-situation))))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (position r1))
+    (printf "Position of r2: ~a\n" (position r2))
+    (printf "Position of r3: ~a\n" (position r3)))
+  (define (all-robot-positions-known?)
+    (define result
+      (andmap position-known? (list r1 r2 r3)))
+    (printf "all-robot-positions-known? ~a\n" result)
+    result)
+  (define results
+    (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
+	     (amb (begin
+		    (printf "First branch\n")
+		    (print-positions)
+		    (move r1 (pos 1 1))
+		    (print-positions)
+		    (move r2 (pos 0 2))
+		    (print-positions)
+		    (move r1 (pos 1 2))
+		    (print-positions)
+		    (printf "Situation: ~a\n"
+			    (map data->sexp (actions (current-situation))))
+		    (ensure (all-robot-positions-known?)))
+		  (begin
+		    (printf "Second branch (should be aborted immediately)\n")
+		    (move 'something-that-cannot-be-moved (pos 1 2))
+		    (move r2 (pos 2 3))
+		    (print-positions)
+		    (move r3 (pos 1 1))
+		    (ensure (all-robot-positions-known?)))
+		  (begin
+		    (printf "Third branch\n")
+		    (print-positions)
+		    (move r2 (pos 2 3))
+		    (print-positions)
+		    (move r3 (pos 1 1))
+		    (print-positions)
+		    (printf "Situation: ~a\n"
+			    (map data->sexp (actions (current-situation))))
+		    (ensure (all-robot-positions-known?))))))
+  (print-positions)
+  (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+	  (map data->sexp (actions (current-situation)))))
+
