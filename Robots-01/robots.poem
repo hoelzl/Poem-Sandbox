@@ -7,8 +7,9 @@
          <physical-object> position physical-object? position-known?
          <brick> weight brick? make-brick
          <robot> name max-load loaded-bricks robot? make-robot
+	 all-robots
          available-load
-         move pick-up)
+         move move-up move-down move-left move-right pick-up)
 
 (defclass <pos> ()
   x
@@ -58,6 +59,7 @@
   :auto #t
   :metaclass <logical-class>)
 
+;;; TODO: This should be stored in the current situation
 (define all-robots (make-parameter empty))
 
 (defclass <robot> (<physical-object>)
@@ -74,6 +76,13 @@
     (setf! (position self)
 	   (apply make-pos (position self)))))
 
+(defmethod pick ((type (singleton <robot>)) &opt pred)
+  (if pred
+      (for ([r (in-list (all-robots))])
+	(when (pred r)
+	  (deliver r)))
+      (an-element-of (all-robots))))
+
 (define (sum-all lst)
   (foldl + 0 lst))
 
@@ -87,11 +96,29 @@
 	  (name obj) (list (x pos) (y pos)))
   (setf! (position obj) pos))
 
-(define-action-type move-up (obj) ;; ((obj <physical-object>))
-  :precondition #t
+(define-action-type move-up (obj)
+  :precondition (physical-object? obj)
   (setf! (position obj)
 	 (make-pos  (x (position obj))
-		    (+ 1 (y (position obj))))))
+		    (add1 (y (position obj))))))
+
+(define-action-type move-down (obj)
+  :precondition (physical-object? obj)
+  (setf! (position obj)
+	 (make-pos  (x (position obj))
+		    (sub1 (y (position obj))))))
+
+(define-action-type move-left (obj)
+  :precondition (physical-object? obj)
+  (setf! (position obj)
+	 (make-pos  (sub1 (x (position obj)))
+		    (y (position obj)))))
+
+(define-action-type move-right (obj)
+  :precondition (physical-object? obj)
+  (setf! (position obj)
+	 (make-pos  (add1 (x (position obj)))
+		    (y (position obj)))))
 
 (define-action-type pick-up (robot brick)
   :precondition (and (robot? robot) (brick? brick)
@@ -296,6 +323,7 @@
 		    (ensure (all-robot-positions-known?))))))
   (print-positions)
   (printf "Results: ~a\n" results)
+  (printf "All robots: ~a\n" (map name (all-robots)))
   (printf "Final situation: ~a\n"
 	  (map data->sexp (actions (current-situation)))))
 

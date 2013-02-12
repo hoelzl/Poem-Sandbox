@@ -35,10 +35,12 @@
 	 amb amb* deliver fail ensure
 	 amb-list amb-list*
 
-	 an-integer->= an-integer-<= 
+	 an-integer->= an-integer-<= an-integer
 	 an-integer-between an-integer-between* an-integer-between**
 	 a-multiple-of a-factor-of
-	 an-element-of)
+	 an-element-of
+
+	 pick)
 
 (require "utils.poem")
 (require racket/control)
@@ -488,6 +490,25 @@
   (amb-list*
    (for/list ([i (in-range m (add1 n))])
      i)))
+
+(define (an-integer)
+  (define (gen n)
+    (amb (- n) n (gen (add1 n))))
+  (amb 0 (gen 1)))
+
+(defgeneric pick (type &opt pred))
+
+
+(defmethod pick ([type (singleton <integer>)] &opt pred)
+  (if pred
+      (begin
+	(when (pred 0) (deliver 0))
+	(for ([n (in-naturals 1)])
+	  (when (pred (- n))
+	    (deliver (- n)))
+	  (when (pred n)
+	    (deliver n))))
+      (an-integer)))
 
 (define-for-syntax (make-integer-list m n)
   (if (m . > . n)
