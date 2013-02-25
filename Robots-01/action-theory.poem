@@ -21,7 +21,7 @@
          effect-axiom
 	 proc-body
          assert
-         all-action-type-names
+         all-action-type-names all-action-types
          action-type-name? get-action-type
          define-action-type
          @pre
@@ -31,7 +31,6 @@
          arguments
 	 add-action!
 	 signature
-	 data->sexp
 
          <fluent>
          axiom
@@ -179,9 +178,13 @@
 (define (get-action-type name)
   (hash-ref all-action-type-names name))
 
+(define (all-action-types)
+  (hash-values all-action-type-names))
+
 (defentityclass <action-type> ()
   name
   (parameters :initivalue '())
+  (parameter-types :initvalue '())
   (precondition :initvalue '())
   (effect-axiom :initvalue '())
   (proc-body :initvalue '())
@@ -211,7 +214,12 @@
   (set-instance-proc! act (make-action-proc action)))
 
 (defmethod signature ([act <action-type>])
-  (list* (name act) (parameters act)))
+  (list* (name act) (parameter-types act)))
+
+(defmethod pick ([action (singleton <action-type>)] &opt pred)
+  (if pred
+      (an-element-of (filter pred (all-action-types)))
+      (an-element-of (all-action-types))))
 
 (defclass <action> ()
   action-type
@@ -229,37 +237,33 @@
 (defmethod signature ([act <action>])
   (signature (action-type act)))
 
-(defgeneric data->sexp (thing))
-
-(defmethod data->sexp (thing)
-  thing)
-
-(defmethod data->sexp ([act <action>])
-  (list* (name act) (map data->sexp (arguments act))))
-
 (define (convert-to-axiom id args precondition body)
   body)
+
+(defmethod datum->sexp ([act <action>])
+  (list* (name act) (map datum->sexp (arguments act))))
 
 (define-syntax define-action-type
   (lambda (stx)
     (syntax-case stx ()
-      [(_ id args
+      [(_ id class ((arg type) ...)
           :precondition precondition
           exp ...)
        #'(define id
-           (let ([act (make <action-type>
+           (let ([act (make class
                         :name 'id
-                        :parameters 'args
+                        :parameters '(arg ...)
+			:parameter-types (list type ...)
                         :precondition 'precondition
 			:proc-body '(exp ...)
                         :effect-axiom (convert-to-axiom
-				       'id 'args 'precondition '(exp ...)))])
+				       'id '(arg ...) 'precondition '(exp ...)))])
 	     (set-instance-proc! 
 	      act
-	      (lambda args
+	      (lambda (arg ...)
 		(unless precondition (fail))
 		(current-situation (do! (make-action
-					 id (list . args))
+					 id (list arg ...))
 					(current-situation)))
 		exp ...))
              act))]

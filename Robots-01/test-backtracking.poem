@@ -14,7 +14,7 @@
    "var 1"
    (define var (make <var>))
    (setf! (value var) 123)
-   (with-saved-vars
+   (atomically
     (setf! (value var) 234)
     (check-equal? (value var) 234))
    (check-equal? (value var) 123))
@@ -31,7 +31,7 @@
    (define cont #f)
    (define count 0)
    ;; (printf "Before saving vars\n")
-   (with-saved-vars
+   (atomically
     (begin
       ;; (printf "In begin\n")
       (setf! (value var) 234)
@@ -75,7 +75,7 @@
 	    ;; (printf "Setting cont to #f\n")
 	    (set! cont #f)]))
    ;; (printf "Before saving vars\n")
-   (with-saved-vars
+   (atomically
     (begin
       ;; (printf "In begin 1\n")
       (setf! (value var) 234)
@@ -89,7 +89,7 @@
       ;; (printf "After k\n")
       ;; (printf "var = 234\n")
       (check-equal? (value var) 234)))
-   (with-saved-vars
+   (atomically
     (unless (eq? cont cont-1)
       ;; (printf "In begin 2\n")
       (setf! (value var) 345)
@@ -439,6 +439,7 @@
       foo   b bar
       foo   b bar)))
 )
+
 
 (define-test-suite medium-amb-suite
   amb-suite

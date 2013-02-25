@@ -1,52 +1,55 @@
 #lang poem
 
 (provide <var>
-	 value set-value!
-	 with-saved-vars
-	 freeze
-
-	 <result-strategy>
-	 collect-result
-	 record-failure!
-	 after-collection-hook
-	 <all-results-strategy> <one-result-strategy>
-	 results set-results! result set-result!
-	 <n-results-strategy>
-	 number-of-results number-of-results-so-far
-	 <numeric-results-strategy>
-	 
-	 <search-strategy>
-	 next-node! add-node! add-nodes!
-	 <list-search-strategy> <dfs> <bfs>
-	 <ids-node> 
-	 ids-node-depth set-ids-node-depth!
-	 ids-node-value set-ids-node-value!
-
-	 <ids>
-	 ;;; Not sure whether these should be exported here
-	 ;;; Maybe put them into a submodule for testing?
-	 nodes set-nodes!
-	 initial-nodes set-initial-nodes!
-	 max-depth set-max-depth!
-	 curr-depth set-curr-depth!
-	 need-deepening? set-need-deepening?!
-
-	 collect
-	 amb amb* deliver fail ensure
-	 amb-list amb-list*
-
-	 an-integer->= an-integer-<= an-integer
-	 an-integer-between an-integer-between* an-integer-between**
-	 a-multiple-of a-factor-of
-	 an-element-of
-
-	 pick)
+         var?
+         value set-value!
+         atomically
+         var-hash ;; for debugging
+         get-var-hash-counter
+         freeze
+         
+         <result-strategy>
+         collect-result
+         record-failure!
+         after-collection-hook
+         <all-results-strategy> <one-result-strategy>
+         results set-results! result set-result!
+         <n-results-strategy>
+         number-of-results number-of-results-so-far
+         <numeric-results-strategy>
+         
+         <search-strategy>
+         next-node! add-node! add-nodes!
+         <list-search-strategy> <dfs> <bfs>
+         <ids-node> 
+         ids-node-depth set-ids-node-depth!
+         ids-node-value set-ids-node-value!
+         
+         <ids>
+         ;;; Not sure whether these should be exported here
+         ;;; Maybe put them into a submodule for testing?
+         nodes set-nodes!
+         initial-nodes set-initial-nodes!
+         max-depth set-max-depth!
+         curr-depth set-curr-depth!
+         need-deepening? set-need-deepening?!
+         
+         collect
+         amb amb* deliver fail ensure
+         amb-list amb-list*
+         
+         an-integer->= an-integer-<= an-integer
+         an-integer-between an-integer-between* an-integer-between**
+         a-multiple-of a-factor-of
+         an-element-of
+         
+         pick)
 
 (require "utils.poem")
 (require racket/control)
 (require data/queue)
 
-(define debugging? #f)
+(define debugging? #t)
 (define (debug-printf . args)
   (when debugging?
     (apply printf args)))
@@ -55,34 +58,52 @@
 ;;; Vars
 ;;; ====
 
-(define var-hash (make-parameter (make-immutable-hasheq)))
+(define var-hash-tag (gensym "var-hash-tag"))
+(define var-hash-counter 0)
 
-(defclass <var> ())
+(define (update-hash-counter hash)
+  (inc! var-hash-counter)
+  (hash-set hash var-hash-tag var-hash-counter))
+
+(define (get-var-hash-counter [hash (var-hash)])
+  (hash-ref hash var-hash-tag))
+
+(define var-hash (make-parameter
+                  (update-hash-counter
+                   (make-immutable-hasheq))))
+
+(defclass <var> ()
+  name
+  :auto #t)
 
 (define no-initarg (list "No initarg"))
+
+(defmethod value ([var <var>])
+  (hash-ref (var-hash) var ???))
+
+(defmethod set-value! ([var <var>] new-value)
+  (debug-printf "Setting value of var to ~a\n" (datum->sexp new-value))
+  (var-hash (update-hash-counter
+             (hash-set (var-hash) var new-value))))
 
 (defaftermethod initialize ([var <var>] initargs)
   (define value (getarg initargs :value no-initarg))
   (unless (eq? value no-initarg)
     (set-value! var value)))
 
-(defmethod value ([var <var>])
-  (hash-ref (var-hash) var ???))
-
-(defmethod set-value! ([var <var>] new-value)
-  (var-hash (hash-set (var-hash) var new-value)))
-
-(define-syntax with-saved-vars
+(define-syntax atomically
   (syntax-rules ()
     [(_ body ...)
      (parameterize ([var-hash (var-hash)])
+       (debug-printf "atomically: saving var-hash ~a\n"
+		     (get-var-hash-counter))
        body ...)]))
 
 (defgeneric freeze (thing))
 (defmethod freeze (thing)
   thing)
 (defmethod freeze ([var <var>])
-  (value var))
+  (freeze (value var)))
 
 
 ;;; Result Strategies
@@ -139,10 +160,10 @@
 (defmethod collect-result ([strategy <one-result-strategy>] node)
   (define node-is-void? (eq? node (void)))
   (cond [node-is-void?
-	 #t]
-	[else
-	 (setf! (result strategy) node)
-	 #f]))
+         #t]
+        [else
+         (setf! (result strategy) node)
+         #f]))
 
 (defmethod result-list ([strategy <one-result-strategy>])
   (list (result strategy)))
@@ -155,12 +176,12 @@
 
 (defmethod collect-result ([strategy <n-results-strategy>] node)
   (cond [(eq? node (void))
-	 #t]
-	[else
-	 (inc! (number-of-results-so-far strategy))
-	 (enqueue! (results strategy) node)
-	 (< (number-of-results-so-far strategy)
-	    (number-of-results strategy))]))
+         #t]
+        [else
+         (inc! (number-of-results-so-far strategy))
+         (enqueue! (results strategy) node)
+         (< (number-of-results-so-far strategy)
+            (number-of-results strategy))]))
 
 
 (defclass <numeric-results-strategy> (<multi-result-strategy>))
@@ -205,30 +226,30 @@
   (if (empty? ks)
       #f
       (begin
-	(setf! (nodes strategy) (rest ks))
-	(first ks))))
+        (setf! (nodes strategy) (rest ks))
+        (first ks))))
 
 
 (defclass <dfs> (<list-search-strategy>))
 
 (defmethod add-node! ([strategy <dfs>] k)
   (setf! (nodes strategy)
-	 (list* k (nodes strategy))))
+         (list* k (nodes strategy))))
 
 (defmethod add-nodes! ([strategy <dfs>] ks)
   (setf! (nodes strategy)
-	 (append ks (nodes strategy))))
+         (append ks (nodes strategy))))
 
 
 (defclass <bfs> (<list-search-strategy>))
 
 (defmethod add-node! ([strategy <bfs>] k)
   (setf! (nodes strategy)
-	 (append (nodes strategy) (list k))))
+         (append (nodes strategy) (list k))))
 
 (defmethod add-nodes! ([strategy <bfs>] ks)
   (setf! (nodes strategy)
-	 (append (nodes strategy) ks)))
+         (append (nodes strategy) ks)))
 
 (defentityclass <ids-node> ()
   depth
@@ -254,7 +275,7 @@
 (defmethod collect-result ([strategy <ids>] result)
   (debug-printf "collect-result: ~a\n" result)
   (debug-printf "max-depth: ~a, curr-depth: ~a\n" 
-		(max-depth strategy) (curr-depth strategy))
+                (max-depth strategy) (curr-depth strategy))
   (if (= (max-depth strategy) (curr-depth strategy))
       (collect-result (result-strategy strategy) result)
       #t))
@@ -262,45 +283,45 @@
 (defmethod next-node! ([strategy <ids>])
   (define ns (nodes strategy))
   (cond [(empty? ns)
-	 (cond ((need-deepening? strategy)
-		(unless (initial-nodes strategy)
-		  (error "Iterative deepening without initial nodes?"))
-		(setf! (need-deepening? strategy) #f)
-		(inc! (max-depth strategy))
-		(setf! (nodes strategy) (rest (initial-nodes strategy)))
-		(let ([node (first (initial-nodes strategy))])
-		  (setf! (curr-depth strategy) (ids-node-depth node))
-		  node))
-	       (else #f))]
-	[else
-	 (setf! (nodes strategy) (rest ns))
-	 (let ((node (first ns)))
-	   (setf! (curr-depth strategy) (ids-node-depth node))
-	   node)]))
+         (cond ((need-deepening? strategy)
+                (unless (initial-nodes strategy)
+                  (error "Iterative deepening without initial nodes?"))
+                (setf! (need-deepening? strategy) #f)
+                (inc! (max-depth strategy))
+                (setf! (nodes strategy) (rest (initial-nodes strategy)))
+                (let ([node (first (initial-nodes strategy))])
+                  (setf! (curr-depth strategy) (ids-node-depth node))
+                  node))
+               (else #f))]
+        [else
+         (setf! (nodes strategy) (rest ns))
+         (let ((node (first ns)))
+           (setf! (curr-depth strategy) (ids-node-depth node))
+           node)]))
 
 (define (maybe-make-ids-node strategy val)
   (if ((curr-depth strategy) . >= . (max-depth strategy))
       (begin (setf! (need-deepening? strategy) #t) 
-	     #f)
+             #f)
       (make <ids-node>
-	:depth (add1 (curr-depth strategy))
-	:value val)))
+            :depth (add1 (curr-depth strategy))
+            :value val)))
 
 (define (maybe-make-ids-nodes strategy vals)
   (if ((curr-depth strategy) . >= . (max-depth strategy))
       (begin (setf! (need-deepening? strategy) #t) 
-	     #f)
+             #f)
       (map (lambda (val)
-	     (make <ids-node>
-	       :depth (add1 (curr-depth strategy))
-	       :value val))
-	   vals)))
+             (make <ids-node>
+                   :depth (add1 (curr-depth strategy))
+                   :value val))
+           vals)))
 
 (defmethod add-node! ((strategy <ids>) k)
   (let ([new-node (maybe-make-ids-node strategy k)])
     (when new-node
       (setf! (nodes strategy)
-	     (list* new-node (nodes strategy))))))
+             (list* new-node (nodes strategy))))))
 
 (defmethod add-initial-node! ([strategy <ids>] k)
   (let ([new-node (maybe-make-ids-node strategy k)])
@@ -313,7 +334,7 @@
   (let ([new-nodes (maybe-make-ids-nodes strategy ns)])
     (when new-nodes
       (setf! (nodes strategy)
-	     (append new-nodes (nodes strategy))))))
+             (append new-nodes (nodes strategy))))))
 
 #;
 (defmethod add-initial-nodes! ([strategy <ids>] ks)
@@ -330,13 +351,13 @@
 (define-syntax let/ambcc
   (syntax-rules ()
     [(_ cont body ...)
-     (with-saved-vars
-       (call-with-current-continuation
-	(lambda (cont)
-	  body ...
-	  (debug-printf "Failing\n")
-	  (fail))
-	amb-tag))]))
+     (atomically
+      (call-with-current-continuation
+       (lambda (cont)
+         body ...
+         (debug-printf "Failing\n")
+         (fail))
+       amb-tag))]))
 
 (define-syntax amb
   (syntax-rules ()
@@ -344,31 +365,40 @@
      (let/ambcc 
       cont
       (define saved-var-hash (var-hash))
+      (debug-printf "amb ~a: saved var hash: ~a\n" '(value ...)
+		    (get-var-hash-counter))
       (debug-printf "amb: adding nodes\n")
       (add-nodes!
        (amb-search-strategy)
        (list (thunk
-	      (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
+	      (define saved-counter (get-var-hash-counter saved-var-hash))
+	      (define counter (get-var-hash-counter))
+              (debug-printf "amb: restoring var hash ~a\n" saved-counter)
+	      (debug-printf "amb: current var hash: ~a\n" counter)
 	      (var-hash saved-var-hash)
-	      (debug-printf "Calling cont\n")
-	      (cont value)
-	      (debug-printf "Should never get here\n")) ...)))]))
+              (debug-printf "Calling cont\n")
+              (cont value)
+              (debug-printf "Should never get here\n")) ...)))]))
 
 (define (amb-list lst)
   (let/ambcc
    cont
    (define saved-var-hash (var-hash))
+   (debug-printf "amb-list: saved var hash: ~a\n" (get-var-hash-counter saved-var-hash))
    (debug-printf "amb-list: adding nodes\n")
    (add-nodes!
     (amb-search-strategy)
     (map (lambda (val)
-	   (thunk
-	    (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
-	    (var-hash saved-var-hash)
-	    (debug-printf "Calling value cont\n")
-	    (cont (val))
-	    (debug-printf "Should never get here\n")))
-	 lst))))
+           (thunk
+	      (define saved-counter (get-var-hash-counter saved-var-hash))
+	      (define counter (get-var-hash-counter))
+              (debug-printf "amb-list: restoring var hash ~a\n" saved-counter)
+	      (debug-printf "amb-list: current var hash: ~a\n" counter)
+	      (var-hash saved-var-hash)
+            (debug-printf "Calling value cont\n")
+            (cont (val))
+            (debug-printf "Should never get here\n")))
+         lst))))
 
 
 ;;; Should behave identical to amb
@@ -382,36 +412,43 @@
 ;;; This behaves differently when backtracking!
 (define (amb-list* lst)
   (let/ambcc cont
-	     (debug-printf "amb-list: adding nodes\n")
-	     (add-nodes!
-	      (amb-search-strategy)
-	      (map (lambda (val)
-		     (thunk
-		      (debug-printf "Calling value cont\n")
-		      (cont val)
-		      (debug-printf "Should never get here\n")))
-		   lst))))
+             (debug-printf "amb-list: adding nodes\n")
+             (add-nodes!
+              (amb-search-strategy)
+              (map (lambda (val)
+                     (thunk
+                      (debug-printf "Calling value cont\n")
+                      (cont val)
+                      (debug-printf "Should never get here\n")))
+                   lst))))
 
 ;;; What about saving the var-hash in this scenario?
 (define (deliver value)
   (debug-printf "Delivering ~a\n" value)
   (let/ambcc cont
-	     (define saved-var-hash (var-hash))
-	     (define strategy (amb-search-strategy))
-	     (add-node!
-	      strategy
-	      (thunk
-	       (debug-printf "Restoring var-hash to size ~a\n" (hash-count (var-hash)))
+             (define saved-var-hash (var-hash))
+             (debug-printf "deliver: saved var hash: ~a\n" (get-var-hash-counter saved-var-hash))
+             (define strategy (amb-search-strategy))
+             (add-node!
+              strategy
+              (thunk
+	       (define saved-counter (get-var-hash-counter saved-var-hash))
+	       (define counter (get-var-hash-counter))
+	       (debug-printf "deliver/cont: restoring var hash ~a\n" saved-counter)
+	       (debug-printf "deliver/cont: current var hash: ~a\n" counter)
 	       (var-hash saved-var-hash)
-	       (debug-printf "Continuing after delivering a value\n")
-	       (cont 'command-continuation)))
-	     (add-node!
-	      strategy
-	      (thunk
-	       (debug-printf "Resoring var-hash\n")
+               (debug-printf "Continuing after delivering a value\n")
+               (cont 'command-continuation)))
+             (add-node!
+              strategy
+              (thunk
+	       (define saved-counter (get-var-hash-counter saved-var-hash))
+	       (define counter (get-var-hash-counter))
+	       (debug-printf "deliver/value: restoring var hash ~a\n" saved-counter)
+	       (debug-printf "deliver/value: current var hash: ~a\n" counter)
 	       (var-hash saved-var-hash)
-	       (debug-printf "Delivering value ~a\n" value)
-	       (abort/cc amb-tag 'deliver value))))
+               (debug-printf "Delivering value ~a\n" value)
+               (abort/cc amb-tag 'deliver value))))
   (void))
 
 (define (fail)
@@ -433,49 +470,49 @@
     [(_ (search-strategy) body ...)
      (let ()
        (define (process-result res)
-	 (define continue? (collect-result (amb-search-strategy) res))
-	 (cond [continue?
-		(debug-printf "Continuing\n")
-		(with-saved-vars
-		 (call-with-continuation-prompt 
-		  fail amb-tag amb-handler))]
-	       [else
-		(abort/cc amb-abort-tag)]))
+         (define continue? (collect-result (amb-search-strategy) res))
+         (cond [continue?
+                (debug-printf "Continuing\n")
+                (atomically
+                 (call-with-continuation-prompt 
+                  fail amb-tag amb-handler))]
+               [else
+                (abort/cc amb-abort-tag)]))
        (define (amb-handler kind value)
-	 (case kind
-	   [(cont)
-	    (debug-printf "In collect/cont 1: ~a\n" value)
-	    (let ([res (with-saved-vars
-			(call-with-continuation-prompt 
-			 value amb-tag amb-handler))])
-	      (process-result res))]
-	   [(deliver)
-	    (debug-printf "In collect/deliver: ~a\n" value)
-	    (process-result value)]))
+         (case kind
+           [(cont)
+            (debug-printf "In collect/cont 1: ~a\n" value)
+            (let ([res (atomically
+                        (call-with-continuation-prompt 
+                         value amb-tag amb-handler))])
+              (process-result res))]
+           [(deliver)
+            (debug-printf "In collect/deliver: ~a\n" value)
+            (process-result value)]))
        (parameterize ([amb-search-strategy search-strategy])
-	 (call-with-continuation-prompt
-	  (thunk
-	   (call-with-continuation-prompt
-	    (thunk
-	     (let/ambcc cont
-	       (add-initial-node!
-		(amb-search-strategy)
-		(thunk
-		 (debug-printf "Returning Initial value\n")
-		 (abort/cc amb-tag 'deliver 
-			   (with-saved-vars
-			     body ...))))))
-	    amb-tag amb-handler))
-	  amb-abort-tag
-	  (thunk
-	   (debug-printf "Exiting 1\n")
-	   (define current-strategy (amb-search-strategy))
-	   (after-collection-hook current-strategy)
-	   (result-list current-strategy)))
-	 (debug-printf "Exiting 1\n")
-	 (define current-strategy (amb-search-strategy))
-	 (after-collection-hook current-strategy)
-	 (result-list current-strategy)))]
+         (call-with-continuation-prompt
+          (thunk
+           (call-with-continuation-prompt
+            (thunk
+             (let/ambcc cont
+                        (add-initial-node!
+                         (amb-search-strategy)
+                         (thunk
+                          (debug-printf "Returning Initial value\n")
+                          (abort/cc amb-tag 'deliver 
+                                    (atomically
+                                     body ...))))))
+            amb-tag amb-handler))
+          amb-abort-tag
+          (thunk
+           (debug-printf "Exiting 1\n")
+           (define current-strategy (amb-search-strategy))
+           (after-collection-hook current-strategy)
+           (result-list current-strategy)))
+         (debug-printf "Exiting 1\n")
+         (define current-strategy (amb-search-strategy))
+         (after-collection-hook current-strategy)
+         (result-list current-strategy)))]
     [(_ () body ...)
      (collect ((make <dfs>)) body ...)]))
 
@@ -498,16 +535,15 @@
 
 (defgeneric pick (type &opt pred))
 
-
 (defmethod pick ([type (singleton <integer>)] &opt pred)
   (if pred
       (begin
-	(when (pred 0) (deliver 0))
-	(for ([n (in-naturals 1)])
-	  (when (pred (- n))
-	    (deliver (- n)))
-	  (when (pred n)
-	    (deliver n))))
+        (when (pred 0) (deliver 0))
+        (for ([n (in-naturals 1)])
+          (when (pred (- n))
+            (deliver (- n)))
+          (when (pred n)
+            (deliver n))))
       (an-integer)))
 
 (define-for-syntax (make-integer-list m n)
@@ -534,18 +570,18 @@
 (define (a-factor-of** k)
   (let ([i (an-integer-between 2 (floor (/ k 2)))])
     (if (zero? (modulo k i))
-	i
-	(fail))))
+        i
+        (fail))))
 
 (define (a-factor-of* k)
   (let loop ([i 2])
     (cond [(zero? (modulo k i))
-	   (deliver i)
-	   (loop (add1 i))]
-	  [(i . >= . (floor (/ k 2)))
-	   (fail)]
-	  [else
-	   (loop (add1 i))])))
+           (deliver i)
+           (loop (add1 i))]
+          [(i . >= . (floor (/ k 2)))
+           (fail)]
+          [else
+           (loop (add1 i))])))
 
 (define (a-factor-of k)
   (for ([i (in-range 2 (floor (/ k 2)))])

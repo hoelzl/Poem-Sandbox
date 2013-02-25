@@ -4,7 +4,8 @@
 	 required-initarg
 	 assert
 	 contains?
-	 reuse-cons)
+	 reuse-cons
+     datum->sexp)
 
 (define (required-argument name)
   (thunk
@@ -38,3 +39,15 @@
   (if (and (eq? hd (car val)) (eq? tl (cdr val)))
       val
       (cons hd tl)))
+
+
+(defgeneric datum->sexp (thing))
+
+(defmethod datum->sexp (thing)
+  thing)
+
+(defmethod datum->sexp ([pair <pair>])
+  (reuse-cons (datum->sexp (car pair))
+              (datum->sexp (cdr pair))
+              pair))
+

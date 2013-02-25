@@ -1,0 +1,371 @@
+Welcome to DrRacket, version 5.3.3.1--2013-02-09(2c35a98a/d) [3m].
+Language: poem; memory limit: 1024 MB.
+Setting value of var to ()
+Setting value of var to #hasheq()
+Setting value of var to ()
+Setting value of var to #hasheq()
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+> (datum->sexp (make <physical-object> :name 'foo))
+Setting value of var to #hasheq((position23252 . #f))
+(<physical-object> foo)
+> (simple-example-06-bad)
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5))
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+atomically: saving var-hash 18
+Failing
+Failing
+In collect/cont 1: #<procedure>
+atomically: saving var-hash 18
+Returning Initial value
+atomically: saving var-hash 18
+Var hash counter 1: 18
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 2: 18
+Action: move-down
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 18
+Robot: r3, pos = (pos 0 1)
+Setting value of var to ((move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 21
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 21
+Robot: r2, pos = (pos 0 4)
+Setting value of var to ((move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 24
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 24
+Robot: r1, pos = (pos 2 1)
+Setting value of var to ((move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 27
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 2: 27
+Action: move-left
+atomically: saving var-hash 27
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 27
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 27
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 27
+Robot: r3, pos = (pos 0 0)
+Setting value of var to ((move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 30
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 27
+amb: current var hash: 27
+Calling cont
+atomically: saving var-hash 27
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 27
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 27
+amb: current var hash: 27
+Calling cont
+Var hash counter 3: 30
+Robot: r2, pos = (pos 0 3)
+Setting value of var to ((move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 33
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 27
+amb: current var hash: 27
+Calling cont
+atomically: saving var-hash 27
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 27
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 27
+amb: current var hash: 27
+Calling cont
+Var hash counter 3: 33
+Robot: r1, pos = (pos 2 0)
+Setting value of var to ((move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 36
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 27
+amb: current var hash: 27
+Calling cont
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 27
+amb: restoring var hash 18
+amb: current var hash: 27
+Calling cont
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 2: 36
+Action: move-right
+atomically: saving var-hash 36
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 36
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 36
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 36
+Robot: r3, pos = (pos -1 0)
+Setting value of var to ((move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 39
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 36
+amb: current var hash: 36
+Calling cont
+atomically: saving var-hash 36
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 36
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 36
+amb: current var hash: 36
+Calling cont
+Var hash counter 3: 39
+Robot: r2, pos = (pos -1 3)
+Setting value of var to ((move-right #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 42
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 36
+amb: current var hash: 36
+Calling cont
+atomically: saving var-hash 36
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 36
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 36
+amb: current var hash: 36
+Calling cont
+Var hash counter 3: 42
+Robot: r1, pos = (pos 1 0)
+Setting value of var to ((move-right #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-right #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 45
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 36
+amb: current var hash: 36
+Calling cont
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 36
+amb: restoring var hash 18
+amb: current var hash: 36
+Calling cont
+atomically: saving var-hash 18
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 18
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 18
+amb: current var hash: 18
+Calling cont
+Var hash counter 2: 45
+Action: move-up
+atomically: saving var-hash 45
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 45
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 18
+amb: restoring var hash 45
+amb: current var hash: 18
+Calling cont
+Var hash counter 3: 45
+Robot: r3, pos = (pos 0 0)
+Setting value of var to ((move-up #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-right #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-right #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 48
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 45
+amb: current var hash: 45
+Calling cont
+atomically: saving var-hash 45
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 45
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 45
+amb: current var hash: 45
+Calling cont
+Var hash counter 3: 48
+Robot: r2, pos = (pos 0 3)
+Setting value of var to ((move-up #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-up #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-right #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-right #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 51
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 45
+amb: current var hash: 45
+Calling cont
+atomically: saving var-hash 45
+amb ((car lst) (an-element-of (cdr lst))): saved var hash: 45
+amb: adding nodes
+Failing
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 45
+amb: current var hash: 45
+Calling cont
+Var hash counter 3: 51
+Robot: r1, pos = (pos 2 0)
+Setting value of var to ((move-up #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-up #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-up #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-right #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-right #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-right #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-left #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-left #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-left #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>) (move-down #<robot: name=r1 position=position23573 max-load=max-load23574 loaded-bricks=loaded-bricks23575>) (move-down #<robot: name=r2 position=position23576 max-load=max-load23577 loaded-bricks=loaded-bricks23578>) (move-down #<robot: name=r3 position=position23579 max-load=max-load23580 loaded-bricks=loaded-bricks23581>))
+Setting value of var to #<situation: actions=#<var:> variable-values=#<var:>>
+Setting value of var to #hasheq((position23252 . #f) (position23569 . #<procedure:swindleobj>) (weight23572 . 0.1) (position23573 . #<procedure:swindleobj>) (max-load23574 . 0.5) (loaded-bricks23575 . ()) (position23576 . #<procedure:swindleobj>) (max-load23577 . 0.5) (loaded-bricks23578 . ()) (position23579 . #<procedure:swindleobj>) (max-load23580 . 0.5) (loaded-bricks23581 . ()))
+Var hash counter 4: 54
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 45
+amb: current var hash: 45
+Calling cont
+Failing
+In collect/cont 1: #<procedure:...acktracking.poem:373:13>
+atomically: saving var-hash 45
+amb: restoring var hash 18
+amb: current var hash: 45
+Calling cont
+Failing
+Exiting 1
+Exiting 1
+Result: ()
+> 
