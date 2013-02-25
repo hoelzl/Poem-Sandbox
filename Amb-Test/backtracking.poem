@@ -1,0 +1,593 @@
+#lang poem
+
+(provide <var>
+         var?
+         value set-value!
+         atomically locally
+         var-hash ;; for debugging
+         get-var-hash-counter
+         freeze
+         
+         <result-strategy>
+         collect-result
+         record-failure!
+         after-collection-hook
+         <all-results-strategy> <one-result-strategy>
+         results set-results! result set-result!
+         <n-results-strategy>
+         number-of-results number-of-results-so-far
+         <numeric-results-strategy>
+         
+         <search-strategy>
+         next-node! add-node! add-nodes!
+         <list-search-strategy> <dfs> <bfs>
+         <ids-node> 
+         ids-node-depth set-ids-node-depth!
+         ids-node-value set-ids-node-value!
+         
+         <ids>
+         ;;; Not sure whether these should be exported here
+         ;;; Maybe put them into a submodule for testing?
+         nodes set-nodes!
+         initial-nodes set-initial-nodes!
+         max-depth set-max-depth!
+         curr-depth set-curr-depth!
+         need-deepening? set-need-deepening?!
+         
+         collect
+         amb amb* deliver fail ensure
+         amb-list amb-list*
+         
+         an-integer->= an-integer-<= an-integer
+         an-integer-between an-integer-between* an-integer-between**
+         a-multiple-of a-factor-of
+         an-element-of
+         
+         pick)
+
+(require "utils.poem")
+(require racket/control)
+(require racket/block)
+(require data/queue)
+
+(define debugging? #f)
+(define (debug-printf . args)
+  (when debugging?
+    (apply printf args)))
+
+
+;;; Vars
+;;; ====
+
+(define var-hash-tag (gensym "var-hash-tag"))
+(define var-hash-counter 0)
+
+(define (update-hash-counter hash)
+  (inc! var-hash-counter)
+  (hash-set hash var-hash-tag var-hash-counter))
+
+(define (get-var-hash-counter [hash (var-hash)])
+  (hash-ref hash var-hash-tag))
+
+(define var-hash-table (update-hash-counter
+			(make-immutable-hasheq)))
+
+(define var-hash
+  (case-lambda 
+    [() 
+     var-hash-table]
+    [(new-table)
+     (set! var-hash-table new-table)]))
+
+(defclass <var> ()
+  name
+  :auto #t)
+
+(define no-initarg (list "No initarg"))
+
+(defmethod value ([var <var>])
+  (hash-ref (var-hash) var ???))
+
+(defmethod set-value! ([var <var>] new-value)
+  (debug-printf "Setting value of var to ~a\n" (datum->sexp new-value))
+  (var-hash (update-hash-counter
+             (hash-set (var-hash) var new-value))))
+
+(defaftermethod initialize ([var <var>] initargs)
+  (define value (getarg initargs :value no-initarg))
+  (unless (eq? value no-initarg)
+    (set-value! var value)))
+
+(define-syntax atomically
+  (syntax-rules ()
+    [(_ body ...)
+     (block
+       (define entry-var-hash (var-hash))
+       (dynamic-wind
+	 (thunk
+	  (var-hash entry-var-hash))
+	 (thunk body ...)
+	 (thunk
+	  (set! entry-var-hash (var-hash)))))]))
+
+(define-syntax locally
+  (syntax-rules ()
+    [(_ body ...)
+     (block
+       (define previous-var-hash (var-hash))
+       (define entry-var-hash previous-var-hash)
+       (dynamic-wind
+	 (thunk
+	  (var-hash entry-var-hash))
+	 (thunk body ...)
+	 (thunk
+	  (set! entry-var-hash (var-hash))
+	  (var-hash previous-var-hash))))]))
+
+(defgeneric freeze (thing))
+(defmethod freeze (thing)
+  thing)
+(defmethod freeze ([var <var>])
+  (freeze (value var)))
+
+
+;;; Result Strategies
+;;; =================
+
+(defclass <result-strategy> ())
+
+;; Collect a result and returns true, if the computation should
+;; continue, falso otherwise.
+(defgeneric collect-result (strategy node))
+
+
+(define number-of-failures 0)
+;; Notification that `fail' was called.  Currently mostly useful for
+;; tracing and debugging, but also intended for reinforcement
+;; learning.
+(defgeneric record-failure! (strategy))
+(defmethod record-failure! (strategy)
+  ;; (inc! number-of-failures)
+  #f)
+
+(defgeneric after-collection-hook (strategy))
+(defmethod after-collection-hook (strategy)
+  #f)
+
+;;; Return the results collected by the strategy as a list.
+(defgeneric result-list (strategy))
+
+(defclass <multi-result-strategy> (<result-strategy>)
+  (results :initializer (thunk (make-queue)))
+  :autoaccessors :slot
+  :auto #t)
+
+(defmethod collect-result ([strategy <multi-result-strategy>] node)
+  (define node-is-void? (eq? node (void)))
+  (unless node-is-void?
+    (enqueue! (results strategy) node))
+  #t)
+
+(defmethod result-list ([strategy <multi-result-strategy>])
+  (queue->list (results strategy)))
+
+
+;;; Noting to implement, since the inherited default is already
+;;; sufficient.
+(defclass <all-results-strategy> (<multi-result-strategy>))
+
+
+(defclass <one-result-strategy> (<result-strategy>)
+  (result)
+  :autoaccessors :slot
+  :auto #t)
+
+(defmethod collect-result ([strategy <one-result-strategy>] node)
+  (define node-is-void? (eq? node (void)))
+  (cond [node-is-void?
+         #t]
+        [else
+         (setf! (result strategy) node)
+         #f]))
+
+(defmethod result-list ([strategy <one-result-strategy>])
+  (list (result strategy)))
+
+(defclass <n-results-strategy> (<multi-result-strategy>)
+  (number-of-results :initvalue 1)
+  (number-of-results-so-far :initvalue 0)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ([strategy <n-results-strategy>] node)
+  (cond [(eq? node (void))
+         #t]
+        [else
+         (inc! (number-of-results-so-far strategy))
+         (enqueue! (results strategy) node)
+         (< (number-of-results-so-far strategy)
+            (number-of-results strategy))]))
+
+
+(defclass <numeric-results-strategy> (<multi-result-strategy>))
+
+(defmethod collect-result ([strategy <numeric-results-strategy>] node)
+  (when (number? node)
+    (enqueue! (results strategy) node))
+  #t)
+
+
+(defclass <search-strategy> ()
+  (result-strategy :initializer (thunk (make <all-results-strategy>)))
+  :auto #t
+  :autoaccessors :slot)
+
+(defgeneric next-node! ([strategy <search-strategy>]))
+
+(defgeneric add-initial-node! ([strategy <search-strategy>] node))
+(defmethod add-initial-node! ([strategy <search-strategy>] node)
+  (add-node! strategy node))
+;;; Do we need add initial-nodes! as well?
+
+(defgeneric add-node! ([strategy <search-strategy>] node))
+(defgeneric add-nodes! ([strategy <search-strategy>] nodes))
+
+(defmethod collect-result ([strategy <search-strategy>] node)
+  (collect-result (result-strategy strategy) node))
+
+(defmethod after-collection-hook ([strategy <search-strategy>])
+  (after-collection-hook (result-strategy strategy)))
+
+(defmethod result-list ([strategy <search-strategy>])
+  (result-list (result-strategy strategy)))
+
+(defclass <list-search-strategy> (<search-strategy>)
+  (nodes :initvalue '())
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod next-node! ([strategy <list-search-strategy>])
+  (define ks (nodes strategy))
+  (if (empty? ks)
+      #f
+      (begin
+        (setf! (nodes strategy) (rest ks))
+        (first ks))))
+
+
+(defclass <dfs> (<list-search-strategy>))
+
+(defmethod add-node! ([strategy <dfs>] k)
+  (setf! (nodes strategy)
+         (list* k (nodes strategy))))
+
+(defmethod add-nodes! ([strategy <dfs>] ks)
+  (setf! (nodes strategy)
+         (append ks (nodes strategy))))
+
+
+(defclass <bfs> (<list-search-strategy>))
+
+(defmethod add-node! ([strategy <bfs>] k)
+  (setf! (nodes strategy)
+         (append (nodes strategy) (list k))))
+
+(defmethod add-nodes! ([strategy <bfs>] ks)
+  (setf! (nodes strategy)
+         (append (nodes strategy) ks)))
+
+(defentityclass <ids-node> ()
+  depth
+  value
+  :auto #t
+  :autoaccessors :class-slot)
+
+(defaftermethod initialize ([node <ids-node>] initargs)
+  (set-instance-proc! node (ids-node-value node)))
+
+(defaftermethod set-ids-node-value! ([node <ids-node>] value)
+  (set-instance-proc! node value))
+
+(defclass <ids> (<search-strategy>)
+  (nodes :initvalue '())
+  (initial-nodes :initvalue #f)
+  (max-depth :initvalue 1)
+  (curr-depth :initvalue 0)
+  (need-deepening? :initvalue #f)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ([strategy <ids>] result)
+  (debug-printf "collect-result: ~a\n" result)
+  (debug-printf "max-depth: ~a, curr-depth: ~a\n" 
+                (max-depth strategy) (curr-depth strategy))
+  (if (= (max-depth strategy) (curr-depth strategy))
+      (collect-result (result-strategy strategy) result)
+      #t))
+
+(defmethod next-node! ([strategy <ids>])
+  (define ns (nodes strategy))
+  (cond [(empty? ns)
+         (cond ((need-deepening? strategy)
+                (unless (initial-nodes strategy)
+                  (error "Iterative deepening without initial nodes?"))
+                (setf! (need-deepening? strategy) #f)
+                (inc! (max-depth strategy))
+                (setf! (nodes strategy) (rest (initial-nodes strategy)))
+                (let ([node (first (initial-nodes strategy))])
+                  (setf! (curr-depth strategy) (ids-node-depth node))
+                  node))
+               (else #f))]
+        [else
+         (setf! (nodes strategy) (rest ns))
+         (let ((node (first ns)))
+           (setf! (curr-depth strategy) (ids-node-depth node))
+           node)]))
+
+(define (maybe-make-ids-node strategy val)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+             #f)
+      (make <ids-node>
+            :depth (add1 (curr-depth strategy))
+            :value val)))
+
+(define (maybe-make-ids-nodes strategy vals)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+             #f)
+      (map (lambda (val)
+             (make <ids-node>
+                   :depth (add1 (curr-depth strategy))
+                   :value val))
+           vals)))
+
+(defmethod add-node! ((strategy <ids>) k)
+  (let ([new-node (maybe-make-ids-node strategy k)])
+    (when new-node
+      (setf! (nodes strategy)
+             (list* new-node (nodes strategy))))))
+
+(defmethod add-initial-node! ([strategy <ids>] k)
+  (let ([new-node (maybe-make-ids-node strategy k)])
+    (assert new-node)
+    (setf! (initial-nodes strategy) (list new-node))
+    (setf! (nodes strategy) (list new-node))))
+
+(defmethod add-nodes! ([strategy <ids>] ns)
+  ;; We suppose that the new nodes are all at the same depth
+  (let ([new-nodes (maybe-make-ids-nodes strategy ns)])
+    (when new-nodes
+      (setf! (nodes strategy)
+             (append new-nodes (nodes strategy))))))
+
+#;
+(defmethod add-initial-nodes! ([strategy <ids>] ks)
+  (add-nodes! strategy ks)
+  (setf! (initial-nodes strategy) ks))
+
+
+;;; Amb and friends
+
+(define amb-tag (make-continuation-prompt-tag 'amb))
+(define amb-abort-tag (make-continuation-prompt-tag 'amb-abort))
+(define amb-search-strategy (make-parameter #f))
+
+(define-syntax let/ambcc
+  (syntax-rules ()
+    [(_ cont body ...)
+     (call-with-current-continuation
+      (lambda (cont)
+	body ...
+	(debug-printf "Failing\n")
+	(fail))
+      amb-tag)]))
+
+(define-syntax amb
+  (syntax-rules ()
+    [(_ value ...)
+     (let/ambcc 
+      cont
+      (define saved-var-hash (var-hash))
+      (debug-printf "amb: adding nodes\n")
+      (add-nodes!
+       (amb-search-strategy)
+       (list (thunk
+	      (debug-printf "amb: restoring hash ~a\n" saved-var-hash)
+	      (var-hash saved-var-hash)
+	      (debug-printf "Calling cont\n")
+	      (cont value)
+	      (debug-printf "Should never get here\n")) ...)))]))
+
+(define (amb-list lst)
+  (let/ambcc
+   cont
+   (add-nodes!
+    (amb-search-strategy)
+    (map (lambda (val)
+           (thunk
+            (debug-printf "Calling value cont\n")
+            (cont (val))
+            (debug-printf "Should never get here\n")))
+         lst))))
+
+
+;;; Should behave identical to amb
+(define-syntax amb*
+  (syntax-rules ()
+    [(_ value ...)
+     (amb-list* (list (thunk value) ...))]))
+
+
+;;; Similar to amb-list, but does not expect thunks as arguments.
+;;; This behaves differently when backtracking!
+(define (amb-list* lst)
+  (let/ambcc cont
+             (debug-printf "amb-list: adding nodes\n")
+             (add-nodes!
+              (amb-search-strategy)
+              (map (lambda (val)
+                     (thunk
+                      (debug-printf "Calling value cont\n")
+                      (cont val)
+                      (debug-printf "Should never get here\n")))
+                   lst))))
+
+;;; What about saving the var-hash in this scenario?
+(define (deliver value)
+  (debug-printf "Delivering ~a\n" value)
+  (let/ambcc cont
+             (define strategy (amb-search-strategy))
+             (add-node!
+              strategy
+              (thunk
+               (debug-printf "Continuing after delivering a value\n")
+               (cont 'command-continuation)))
+             (add-node!
+              strategy
+              (thunk
+               (debug-printf "Delivering value ~a\n" value)
+               (abort/cc amb-tag 'deliver value))))
+  (void))
+
+(define (fail)
+  (debug-printf "Failing\n")
+  (define strategy (amb-search-strategy))
+  (define cc (next-node! strategy))
+  (record-failure! strategy)
+  (if cc
+      (abort/cc amb-tag 'cont cc)
+      (abort/cc amb-abort-tag)))
+
+(define (ensure pred)
+  (unless pred
+    (fail))
+  #t)
+
+(define-syntax collect
+  (syntax-rules ()
+    [(_ (search-strategy) body ...)
+     (let ()
+       (define (process-result res)
+         (define continue? (collect-result (amb-search-strategy) res))
+         (cond [continue?
+                (debug-printf "Continuing\n")
+                (call-with-continuation-prompt 
+		 fail amb-tag amb-handler)]
+               [else
+                (abort/cc amb-abort-tag)]))
+       (define (amb-handler kind value)
+         (case kind
+           [(cont)
+            (debug-printf "In collect/cont 1: ~a\n" value)
+            (let ([res (call-with-continuation-prompt 
+			value amb-tag amb-handler)])
+              (process-result res))]
+           [(deliver)
+            (debug-printf "In collect/deliver: ~a\n" value)
+            (process-result value)]))
+       (parameterize ([amb-search-strategy search-strategy])
+         (call-with-continuation-prompt
+          (thunk
+           (locally
+	    (call-with-continuation-prompt
+	     (thunk
+	      (let/ambcc cont
+			 (add-initial-node!
+			  (amb-search-strategy)
+			  (thunk
+			   (debug-printf "Returning Initial value\n")
+			   (abort/cc amb-tag 'deliver 
+				     (block
+				      body ...))))))
+	     amb-tag amb-handler)))
+          amb-abort-tag
+          (thunk
+           (debug-printf "Exiting 1\n")
+           (define current-strategy (amb-search-strategy))
+           (after-collection-hook current-strategy)
+           (result-list current-strategy)))
+         (debug-printf "Exiting 2\n")
+         (define current-strategy (amb-search-strategy))
+         (after-collection-hook current-strategy)
+         (result-list current-strategy)))]
+    [(_ () body ...)
+     (collect ((make <dfs>)) body ...)]))
+
+
+(define (an-integer->= n)
+  (amb n (an-integer->= (+ n 1))))
+
+(define (an-integer-<= n)
+  (amb n (an-integer-<= (- n 1))))
+
+(define (an-integer-between m n)
+  (amb-list*
+   (for/list ([i (in-range m (add1 n))])
+     i)))
+
+(define (an-integer)
+  (define (gen n)
+    (amb (- n) n (gen (add1 n))))
+  (amb 0 (gen 1)))
+
+(defgeneric pick (type &opt pred))
+
+(defmethod pick ([type (singleton <integer>)] &opt pred)
+  (if pred
+      (begin
+        (when (pred 0) (deliver 0))
+        (for ([n (in-naturals 1)])
+          (when (pred (- n))
+            (deliver (- n)))
+          (when (pred n)
+            (deliver n))))
+      (an-integer)))
+
+(define-for-syntax (make-integer-list m n)
+  (if (m . > . n)
+      '()
+      (cons m (make-integer-list (add1 m) n))))
+
+(define-syntax (an-integer-between* stx)
+  (syntax-case stx ()
+    [(_ m n)
+     #`(amb #,@(make-integer-list (syntax->datum #'m) (syntax->datum #'n)))]))
+
+(define (an-integer-between** m n)
+  (if (> m n)
+      (fail)
+      (amb m (an-integer-between (+ m 1) n))))
+
+;; (an-integer-between* 1 10)
+
+(define (a-multiple-of k)
+  (let ([multiplier (an-integer->= 1)])
+    (* multiplier k)))
+
+(define (a-factor-of** k)
+  (let ([i (an-integer-between 2 (floor (/ k 2)))])
+    (if (zero? (modulo k i))
+        i
+        (fail))))
+
+(define (a-factor-of* k)
+  (let loop ([i 2])
+    (cond [(zero? (modulo k i))
+           (deliver i)
+           (loop (add1 i))]
+          [(i . >= . (floor (/ k 2)))
+           (fail)]
+          [else
+           (loop (add1 i))])))
+
+(define (a-factor-of k)
+  (for ([i (in-range 2 (floor (/ k 2)))])
+    (when (zero? (modulo k i))
+      (deliver i)))
+  (fail))
+
+(define (an-element-of lst)
+  (if (null? lst)
+      (fail)
+      (amb (car lst) (an-element-of (cdr lst)))))

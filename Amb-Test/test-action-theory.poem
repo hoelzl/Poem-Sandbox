@@ -1,0 +1,34 @@
+#lang poem
+
+(require "action-theory.poem")
+(require rackunit)
+(require rackunit/text-ui)
+
+(provide action-theory-suite)
+
+(define fluent-1 (make <fluent>
+		   :name 'fluent-1
+		   :axiom '(foo)))
+
+(define test-action-1 (make <action-type>
+			:name 'test-action-1
+			:parameters '(arg1)
+			:precondition '(number? arg1)
+			:effect-axiom '()))
+
+(define test-action-2 (make <action-type>
+			:name 'test-action-2
+			:parameters '(arg1 arg2)
+			:precondition '()
+			:effect-axiom '()))
+
+(define-test-suite action-theory-suite
+
+  (test-case
+   "situation 1"))
+
+#;
+(make-action-proc (parameters test-action-1)
+		  (precondition test-action-1)
+		  (proc-body test-action-1))
+

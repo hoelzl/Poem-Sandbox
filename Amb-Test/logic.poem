@@ -1,0 +1,663 @@
+#lang poem
+
+(require "utils.poem")
+(require "backtracking.poem")
+(require racket/set)
+
+(provide 
+ name+arity->functor
+ functor-regexp
+ parse-functor-name
+ parse-functor-description
+ functor-and-term-compatible?
+ 
+ term->sexp
+ 
+ parse-term parse-terms
+ <application-term>
+ arguments
+ <relation-term>
+ relation
+ <function-term>
+ function
+ 
+ 
+ <logic-variable>
+ logic-variable?
+ name
+ make-logic-variable
+ logic-variable-name?
+ introduce-logic-variables
+ 
+ <relation>
+ relation?
+ name arity functor clauses
+ add-clause variables
+ 
+ all-relations clear-all-relations
+ remove-relation! find-relation set-find-relation!
+ 
+ <horn-clause>
+ horn-clause?
+ functor head
+ <horn-fact>
+ horn-fact?
+ <horn-rule>
+ horn-rule?
+ body
+ 
+ :-
+ find-variables-in fresh-variables-for
+ rename-variables
+ 
+ get-binding binding-val lookup extend-bindings
+ unify unify-variable
+ perform-occurs-check? occurs-check?
+ subst-bindings
+ apply-unifier)
+
+;;; Tools for Handling Functors
+;;; ===========================
+
+(define functor-regexp #rx"^(.+)/([1-9][0-9]*)$")
+
+(define (name+arity->functor name arity)
+  (unless (symbol? name)
+    (error "Name is not a symbol:" functor))
+  (define functor-name+arity
+    (regexp-match functor-regexp (symbol->string name)))
+  (if functor-name+arity
+      (let ([functor-arity (string->number (third functor-name+arity))])
+        (if (equal? arity functor-arity)
+            name
+            (string->symbol (format "~a/~a" name arity))))
+      (string->symbol (format "~a/~a" name arity))))
+
+(define (parse-functor-name functor)
+  (unless (symbol? functor)
+    (error "Functor name is not a symbol:" functor))
+  (define name+arity (regexp-match functor-regexp (symbol->string functor)))
+  (unless name+arity
+    (error "Functor name is not of the form name/arity:" functor))
+  (define functor-name (string->symbol (second name+arity)))
+  (define functor-arity (string->number (third name+arity)))
+  ;; This error should never be triggered unless the functor-regexp is
+  ;; messed up.
+  (unless functor-arity
+    (error "Functor arity is not a number:" functor))
+  (values functor-name functor-arity))
+
+(define (parse-functor-description functor name arity)
+  (when (and functor (not (symbol? functor)))
+    (error "Functor name is not a symbol:" functor))
+  (when (and name (not (symbol? name)))
+    (error "Relation name is not a symbol:" name))
+  (when (and arity (or (not (integer? arity)) (arity . < . 0)))
+    (error "Arity is not a non-negative integer:" arity))
+  (cond [(and name arity)
+         (cond [functor
+                (unless (equal? functor (name+arity->functor name arity))
+                  (error "Name and arity do not match functor:"
+                         name arity functor))]
+               [else
+                (set! functor (name+arity->functor name arity))])]
+        [functor
+         (define-values (functor-name functor-arity)
+           (parse-functor-name functor))
+         (if name
+             (unless (equals? name functor-name)
+               (error "Functor name and relation name do not match:"
+                      functor name))
+             (set! name functor-name))
+         (if arity
+             (unless (= arity functor-arity)
+               (error "Functor arity and explicit arity do not match:"
+                      functor-arity arity))
+             (set! arity functor-arity))]
+        [else
+         (error "Neither name + arity nor functor were specified.")])
+  (values functor name arity))
+
+(defgeneric term->sexp (term))
+(defmethod term->sexp (term)
+  term)
+(defmethod term->sexp ([pair <pair>])
+  (reuse-cons (term->sexp (car pair))
+              (term->sexp (cdr pair))
+              pair))
+
+;;; Applications
+;;; ============
+
+(define (parse-term term [toplevel? #t] [bindings '()])
+  (cond [(pair? term)
+         (let ([head (first term)])
+           (if (symbol? head)
+               (let*-values ([(tail) (rest term)]
+                             [(arguments new-bindings)
+                              (parse-terms tail #f bindings)])
+                 (values (make (if toplevel? <relation-term> <function-term>)
+                               :functor (name+arity->functor head (length tail))
+                               :arguments arguments)
+                         new-bindings))
+               (error "Only first-order terms are allowed.")))]
+        [(logic-variable-name? term)
+         (define binding (assoc term bindings))
+         (if binding
+             (values (cdr binding) bindings)
+             (let* ([new-var (make <logic-variable> :name term)]
+                    [new-bindings (list* (cons term new-var) bindings)])
+               (values new-var new-bindings)))]
+        [else (values term '())]))
+
+(define (parse-terms terms [toplevel? #t] [bindings '()])
+  (define-values (rev-terms final-bindings)
+    (for/fold ([term-list '()] [bindings bindings])
+      ([subterm (in-list terms)])
+      (define-values (new-term new-bindings)
+        (parse-term subterm toplevel? bindings))
+      (values (list* new-term term-list) new-bindings)))
+  (values (reverse rev-terms) final-bindings))
+
+
+(defstruct <application-term> ()
+  functor
+  arguments)
+
+(defmethod functor ([app <application-term>])
+  (application-term-functor app))
+
+(defmethod arguments ([app <application-term>])
+  (application-term-arguments app))
+
+(defmethod arity ([app <application-term>])
+  ;; TODO: Check that this matches the functor's arity when building
+  ;; an <application-term>
+  (length (arguments app)))
+
+(defmethod term->sexp ([term <application-term>])
+  `(,(functor term) ,@(map term->sexp (arguments term))))
+
+
+(defstruct <function-term> (<application-term>)
+  function)
+
+(defmethod function ([fun <function-term>])
+  (define result (function-term-function fun))
+  (if (eq? ??? )
+      (find-function fun)
+      result))
+
+(defmethod make ([class (singleton <function-term>)]
+                 &key functor arguments function)
+  (make-function-term functor arguments
+                      (or function (make <%function> :functor functor))))
+
+(defstruct <relation-term> (<application-term>)
+  relation)
+
+(defmethod make ([class (singleton <relation-term>)]
+                 &key functor arguments relation)
+  (make-relation-term functor arguments
+                      (or relation (make <relation> :functor functor))))
+
+(defmethod relation ([app <relation-term>])
+  (relation-term-relation app))
+
+
+;;; Logic Variables
+;;; ===============
+
+(defstruct <logic-variable> ()
+  name
+  id)
+
+(define id-counter 0)
+(define (next-id!)
+  (inc! id-counter)
+  id-counter)
+
+(defmethod make ([class (singleton <logic-variable>)] &key name)
+  (make-logic-variable (or name 'unnamed-var) (next-id!)))
+
+(defmethod name ([var <logic-variable>])
+  (logic-variable-name var))
+
+(defmethod term->sexp ([var <logic-variable>])
+  (name var))
+
+(define (logic-variable-name? x)
+  (and (symbol? x)
+       (eq? (string-ref (symbol->string x) 0) #\?)))
+
+;;; TODO: Add other datatypes
+(define (introduce-logic-variables term (bindings '()))
+  (cond [(pair? term)
+         (define-values (result-car bindings-1)
+           (introduce-logic-variables (car term) bindings))
+         (define-values (result-cdr result-bindings)
+           (introduce-logic-variables (cdr term) bindings-1))
+         (values (reuse-cons result-car result-cdr term)
+                 result-bindings)]
+        [(null? term)
+         (values '() bindings)]
+        [(logic-variable-name? term)
+         (define binding (assoc term bindings))
+         (if binding
+             (values (cdr binding) bindings)
+             (let* ([new-var (make <logic-variable> :name term)]
+                    [new-bindings (list* (cons term new-var) bindings)])
+               (values new-var new-bindings)))]
+        [else
+         (values term bindings)]))
+
+(define (introduce-logic-variables* term)
+  (define-values (result ignore) (introduce-logic-variables term '()))
+  result)
+
+;;; Relations
+;;; =========
+
+;;; TODO: <relation> is not a particularly good name for the concept
+;;; represented by this class, since relations can (and should) be
+;;; more general than the "Prolog-like" relations represented here.
+;;; --tc 
+
+(defstruct <%functional> ()
+  name
+  arity
+  functor)
+
+(define <functional> <%functional>)
+(define functional? %functional?)
+
+(defmethod name ([rel <functional>])
+  (%functional-name rel))
+
+(defmethod arity ([rel <functional>])
+  (%functional-arity rel))
+
+(defmethod functor ([rel <functional>])
+  (%functional-functor rel))
+
+
+(defstruct <%function> ()
+  body)
+
+(defmethod body ([fun <%function>])
+  (%function-body fun))
+
+
+(define all-functions (make-hasheq))
+
+(define (clear-all-functions) (setf! all-functions (make-hasheq)))
+
+(define (remove-function! name (arity #f))
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-remove! all-functions functor))
+      (hash-remove! all-functions name)))
+
+(define (find-function name (arity #f))
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-ref all-functions functor #f))
+      (hash-ref all-functions name #f)))
+
+(define (set-find-function! name arity new-function)
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-set! all-functions functor new-function))
+      (hash-set! all-functions name new-function)))
+
+(defmethod make ([c (singleton <%function>)]
+                 &key functor name arity body &rest initargs)
+  (set!-values (functor name arity)
+               (parse-functor-description functor name arity))
+  (define fun (hash-ref all-functions functor #f))
+  (or fun
+      (let* ([fun (apply call-next-method c
+                         :functor functor :name name
+                         :arity arity :body body
+                         initargs)])
+        (hash-set! all-functions functor fun)
+        fun)))
+
+
+;;; TODO: Cannot name this class <relation> since otherwise `relation'
+;;; will be defined as syntax.  Hence this ugly workaround.  We really
+;;; need to improve the implementation of the object system and
+;;; integrate it better with the base language.
+(defstruct <%relation> (<%functional>)
+  clauses)
+
+(define <relation> <%relation>)
+
+(define relation? %relation?)
+
+(defmethod clauses ([rel <relation>])
+  (%relation-clauses rel))
+
+(define all-relations (make-hasheq))
+
+(define (clear-all-relations) (setf! all-relations (make-hasheq)))
+
+(define (remove-relation! name (arity #f))
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-remove! all-relations functor))
+      (hash-remove! all-relations name)))
+
+(define (find-relation name (arity #f))
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-ref all-relations functor #f))
+      (hash-ref all-relations name #f)))
+
+(define (set-find-relation! name arity new-relation)
+  (if arity
+      (let ([functor (name+arity->functor name arity)])
+        (hash-set! all-relations functor new-relation))
+      (hash-set! all-relations name new-relation)))
+
+(defmethod make ([c (singleton <relation>)]
+                 &key functor name arity &rest initargs)
+  (set!-values (functor name arity)
+               (parse-functor-description functor name arity))
+  (when (getarg initargs :clauses #f)
+    (error "Adding initial clauses currently not supported;"))
+  (define rel (hash-ref all-relations functor #f))
+  (or rel
+      (let* ([rel (make-%relation name arity functor '())])
+        (hash-set! all-relations functor rel)
+        rel)))
+
+
+;;; Horn Clauses
+;;; ============
+
+(define (functor-and-term-compatible? functor term)
+  (and (pair? term) (eq? functor (first term))))
+
+(defstruct <horn-clause> ()
+  functor
+  head
+  relation
+  variables)
+
+(defmethod functor ([clause <horn-clause>])
+  (horn-clause-functor clause))
+
+(defmethod head ([clause <horn-clause>])
+  (horn-clause-head clause))
+
+(defmethod relation ([clause <horn-clause>])
+  (horn-clause-relation clause))
+
+(defmethod variables ([clause <horn-clause>])
+  (horn-clause-variables clause))
+
+(make-equals?-compare-class+slots <horn-clause>)
+
+(define (clause-compatible-with-relation? clause relation)
+  (equal? (functor clause) (functor relation)))
+
+(defmethod add-clause ([relation <relation>] [clause <horn-clause>])
+  (assert (clause-compatible-with-relation? clause relation))
+  (set-%relation-clauses!
+   relation (append (%relation-clauses relation) (list clause))))
+
+(defstruct <horn-fact> (<horn-clause>))
+
+(defmethod body ([clause <horn-fact>])
+  #f)
+
+(defstruct <horn-rule> (<horn-clause>)
+  body)
+
+(defmethod body ([clause <horn-rule>])
+  (horn-rule-body clause))
+
+(define (find-variables-in term)
+  (cond [(pair? term)
+         (set-union (find-variables-in (car term))
+                    (find-variables-in (cdr term)))]
+        [(horn-fact? term)
+         (find-variables-in (head term))]
+        [(horn-rule? term)
+         (set-union (find-variables-in (head term))
+                    (find-variables-in (body term)))]
+        [(application-term? term)
+         (apply set-union (map find-variables-in (arguments term)))]
+        [(logic-variable? term)
+         (set term)]
+        [else
+         (set)]))
+
+(defmethod make ([class (singleton <horn-clause>)]
+                 &key head body add-to-relation? &rest initargs)
+  (define real-class (if (and body (not (empty? body)))
+                         <horn-rule>
+                         <horn-fact>))
+  (define-values (new-head bindings-1) (parse-term head #t '()))
+  (define-values (new-body bindings-2) (parse-terms body #t bindings-1))
+  (define func (functor new-head))
+  (define relation (find-relation func))
+  (define result
+    (apply call-next-method real-class
+           :functor func :head new-head :body new-body
+           ;; Need to scan head and body, in case they already
+           ;; contained logic variables that we didn't introduce
+           ;; ourselves.
+           :variables (set-union (find-variables-in new-head)
+                                 (find-variables-in new-body))
+           :relation relation
+           initargs))
+  (when add-to-relation?
+    (add-clause relation result))
+  result)
+
+(define (functor-for term)
+  (if (pair? term)
+      (name+arity->functor (first term) (length (rest term)))
+      (error "Term is not a predicate:" term)))
+
+(define-syntax :-
+  (syntax-rules ()
+    [(:- (name arg ...) exp ...)
+     (let* ([arity (length '(arg ...))]
+            [functor (name+arity->functor 'name arity)]
+            [relation (make <relation> :name 'name :arity arity)])
+       (make <horn-clause>
+             :functor functor
+             :head '(name arg ...)
+             :body '(exp ...)
+             :relation relation
+             :add-to-relation? #t))]))
+
+
+;;; Bindings and Standardizing Apart
+;;; ================================
+
+(define (get-binding var bindings)
+  (assoc var bindings))
+
+(define (binding-val binding)
+  (cdr binding))
+
+(define (lookup var bindings)
+  (binding-val (get-binding var bindings)))
+
+(define (extend-bindings var val bindings)
+  (cons (cons var val) bindings))
+
+
+(define (subst-variables x bindings)
+  (cond [(not (list? bindings))
+         (error "Variable bindings must be a list;")]
+        [(logic-variable? x)
+         (define binding (get-binding x bindings))
+         (if binding (binding-val binding) x)]
+        [(pair? x)
+         (reuse-cons (subst-variables (car x) bindings)
+                     (subst-variables (cdr x) bindings)
+                     x)]
+        [(not (pair? x))
+         x]))
+
+(define (fresh-variables-for clause)
+  (for/list ([var (in-set (variables clause))])
+    (cons var (make <logic-variable>
+                    :name (logic-variable-name var)))))
+
+(define (rename-variables clause [bindings (fresh-variables-for clause)])
+  (make <horn-clause>
+        :functor (functor clause)
+        :head (subst-variables (head clause) bindings)
+        :body (subst-variables (body clause) bindings)
+        :relation (relation clause)))
+
+
+;;; Unification
+;;; ===========
+
+;;; A simple unification algorithm, following Norvig's implementation
+;;; in PAIP.
+
+;;; TODO: Extend with other datatypes...
+(define (unify x y (bindings '()))
+  (cond [(not bindings) #f]
+        [(eq? x y) bindings]
+        [(logic-variable? x) (unify-variable x y bindings)]
+        [(logic-variable? y) (unify-variable y x bindings)]
+        [(and (application-term? x) (application-term? y))
+         ;; This assumes that we never have a function and a predicate
+         ;; with the same name.
+         (if (eq? (functor x) (functor y))
+             (unify (arguments x) (arguments y) bindings)
+             #f)]
+        [(and (pair? x) (pair? y))
+         (unify (rest x) (rest y) (unify (first x) (first y) bindings))]
+        [else #f]))
+
+(define perform-occurs-check? (make-parameter #t))
+
+(define (unify-variable var x bindings)
+  (define (unify-binding binding)
+    (unify (binding-val binding) x bindings))
+  (define (unify-bound-variable binding)
+    (unify var (binding-val binding) bindings))
+  (cond [;; This case is never triggered when called by unify
+         (eq? var x)
+         bindings]
+        [(get-binding var bindings)
+         => unify-binding]
+        [(and (logic-variable? x) (get-binding x bindings))
+         => unify-bound-variable]
+        [(and (perform-occurs-check?) (occurs-check? var x bindings))
+         #f]
+        [else
+         (extend-bindings var x bindings)]))
+
+;;; TODO: other data structures
+(define (occurs-check? var x bindings)
+  (cond [(eq? var x) #t]
+        [(and (logic-variable-name? x) (get-binding x bindings))
+         => (lambda (binding)
+              (occurs-check? var (binding-val binding) bindings))]
+        [(pair? x) (or (occurs-check? var (first x) bindings)
+                       (occurs-check? var (rest x) bindings))]
+        [else #f]))
+
+(define (subst-bindings x bindings)
+  (define (subst-in-binding-val binding)
+    (subst-bindings (binding-val binding) bindings))
+  (cond [(not bindings) #f]
+        [(null? bindings) x]
+        [(and (logic-variable? x) (get-binding x bindings))
+         => subst-in-binding-val]
+        [(pair? x)
+         (reuse-cons (subst-bindings (car x) bindings)
+                     (subst-bindings (cdr x) bindings)
+                     x)]
+        [(application-term? x)
+         (make (class-of x)
+               :functor (functor x)
+               :arguments (subst-bindings (arguments x) bindings))]
+        [else x
+              ]))
+
+(define (apply-unifier x y)
+  (subst-bindings x (unify x y)))
+
+
+;;; Proving Results
+;;; ===============
+
+;;; A simple implementation of Prolog-style proof.  Vaguely similar to
+;;; Norvig's implementation in PAIP, but somewhat cleaner and more
+;;; flexible because it uses non-deterministic search.
+
+(define (variable-values vars bindings)
+  (for/list ((var (in-list vars)))
+    (define val (lookup var bindings))
+    (if val
+        (cons (name var) val)
+        (name var))))
+
+(define (prove #:result-strategy
+               [result-strategy (make <all-results-strategy>)]
+               #:search-strategy
+               [search-strategy (make <dfs> :result-strategy result-strategy)]
+               . goals)
+  (define-values (goal-terms bindings)
+    (parse-terms goals #t '()))
+  (define result-term
+    (if (and (pair? goal-terms) (= (length goal-terms) 1))
+        (first goal-terms)
+        (goal-terms)))
+  (collect (search-strategy)
+           (define result (prove-all goal-terms '()))
+           (subst-bindings result-term result)))
+
+(define (prove-all goal-terms bindings)
+  (cond [(not bindings) #f]
+        [(empty? goal-terms) bindings]
+        [else (for/fold ([bindings bindings])
+                ([goal-term (in-list goal-terms)])
+                (or (prove-1 goal-term bindings) (fail)))]))
+
+(define (prove-1 goal-term bindings)
+  (define new-clauses (clauses (find-relation (functor goal-term))))
+  (amb-list
+   (for/list ((clause (in-list new-clauses)))
+     (define new-bindings (unify goal-term (head clause) bindings))
+     (cond [(horn-fact? clause)
+            (lambda () new-bindings)]
+           [(horn-rule? clause)
+            (lambda () (prove-all (body clause) new-bindings))]
+           [else
+            (error "Don't know how to prove goal:" goal-term)]))))
+
+(define (define-simple-theory)
+  (:- (f a))
+  (:- (f b))
+  (:- (f ?x) (g ?x))
+  (:- (g c))
+  (:- (g ?x) (h ?x))
+  (:- (h ?d)))
+
+(define (define-loopy-theory)
+  (define-simple-theory)
+  (:- (f ?x) (f ?x))
+  (:- (f (f ?x)) (f ?x))
+  (:- (g (f ?x)) (g ?x)))
+
+(define (loopy-test [n 30])
+  (define-loopy-theory)
+  (term->sexp
+   (prove #:search-strategy (make <ids>
+                                  :result-strategy (make <n-results-strategy>
+                                                         :number-of-results n))
+          '(f ?x))))
+

@@ -1,0 +1,21 @@
+Welcome to DrRacket, version 5.3.3.1--2013-02-09(2c35a98a/d) [3m].
+Language: poem; memory limit: 1024 MB.
+> (simple-example-06)
+Action: move-down
+Robot: r3, pos = (pos 0 1)
+Robot: r2, pos = (pos 0 4)
+Robot: r1, pos = (pos 2 1)
+Action: move-left
+Robot: r3, pos = (pos 0 1)
+Robot: r2, pos = (pos 0 4)
+Robot: r1, pos = (pos 2 1)
+Action: move-right
+Robot: r3, pos = (pos 0 1)
+Robot: r2, pos = (pos 0 4)
+Robot: r1, pos = (pos 2 1)
+Action: move-up
+Robot: r3, pos = (pos 0 1)
+Robot: r2, pos = (pos 0 4)
+Robot: r1, pos = (pos 2 1)
+Result: ((move-left r1) (move-right r3))
+> 

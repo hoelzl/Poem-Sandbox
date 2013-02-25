@@ -1,0 +1,333 @@
+#lang poem
+
+(require racket/control)
+
+;;; Similar experiments to those in cont1.poem, but using some macros
+;;; to make the test definitions more concise (at the cost of
+;;; obscuring the relationship between the test code and the
+;;; underlying abstractions.
+
+(define default-tag (default-continuation-prompt-tag))
+(define outer-tag (make-continuation-prompt-tag 'outer))
+(define inner-tag (make-continuation-prompt-tag 'inner))
+
+(define cc #f)
+
+(define n 0)
+(define lineno 0)
+       
+(define-syntax with-output
+  (syntax-rules ()
+    ((_ task)
+     (parameterize ((print-reader-abbreviations #t))
+       (inc! n) (inc! lineno)
+       (let ((cnt n))
+	 (printf ";; ~a: == ~a  <--- ~a\n"
+		 (~a lineno #:width 4 #:align 'right)
+		 task cnt))))
+    ((_ task body1 body ...)
+     (parameterize ((print-reader-abbreviations #t))
+       (inc! n)
+       (inc! lineno)
+       (let ((cnt n))
+	 (printf ";; ~a: >> ~a  <--- ~a\n"
+		 (~a lineno #:width 4 #:align 'right)
+		 task cnt)
+	 (let ((result (begin body1 body ...)))
+	   (inc! lineno)
+	   (printf ";; ~a: << ~a  <--- ~a\n"
+		   (~a lineno #:width 4 #:align 'right)
+		   task cnt)
+	   result))))))
+
+(define ((handler tag) . args)
+  (with-output (format "Invoking handler for ~a: ~a" tag args)
+	       args))
+
+(define-syntax call/cp
+  (syntax-rules ()
+    ((_ (prompt-tag prompt-name) body ...)
+     (begin0
+	 (with-output
+	  (format "Establishing prompt ~a" 'prompt-name)
+	  (call-with-continuation-prompt
+	   (thunk 
+	    (with-output
+	     (format "In prompt ~a" 'prompt-name)
+	     body ...))
+	   prompt-tag
+	   (handler 'prompt-name)))
+       (with-output (format "After prompt ~a" 'prompt-name))))
+    ((_ prompt-tag body ...)
+     (call/cp (prompt-tag prompt-tag) body ...))))
+
+(define (init!)
+  (set! cc #f)
+  (set! n 0)
+  (set! lineno 0))
+
+(define-syntax wrap-test
+  (syntax-rules ()
+    ((_ body ...)
+     (begin
+       (init!)
+       (printf ";; Running test\n")
+       (with-handlers ((exn:fail:contract:continuation?
+			(lambda (exn)
+			  (printf "Caught continuation error:\n  ~a\n"
+				  (exn-message exn)))))
+	 body ...)))))
+
+(define-syntax capture-cont
+  (syntax-rules ()
+    ((_ cont-type cont-tag)
+     (cont-type
+      (lambda (cont)
+	(with-output
+	 (format "In ~a" 'cont-type)
+	 (set! cc (lambda (val)
+		    (with-output "Calling continuation"
+				 (set! cc #f)
+				 (cont val))))))
+      cont-tag))))
+
+
+(define-syntax tests
+  (syntax-rules ()
+    ((_ test ...)
+     (list (cons 'test test) ...))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-syntax make-composable-test-1
+  (syntax-rules ()
+    ((_ cont-type cont-tag cc cc-body)
+     (lambda ()
+       (wrap-test
+	(call/cp outer-tag
+		 (call/cp inner-tag
+			  (capture-cont cont-type cont-tag)
+			  (with-output (format "After ~a" 'cont-type)))
+		 (if cc
+		     (with-output (format "Invoking-continuation ~v" 'cc-body)
+				  cc-body)
+		     (with-output "Continuation was #f"))))))))
+
+
+(define test-composable-11/cc
+  (make-composable-test-1 call-with-current-continuation
+			  default-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-11/comp
+  (make-composable-test-1 call-with-composable-continuation
+			  default-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-12/cc
+  (make-composable-test-1 call-with-current-continuation
+			  outer-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-12/comp
+  (make-composable-test-1 call-with-composable-continuation
+			  outer-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-13/cc
+  (make-composable-test-1 call-with-current-continuation
+			  inner-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-13/comp
+  (make-composable-test-1 call-with-composable-continuation
+			  inner-tag
+			  cc
+			  (cc 'ignore)))
+
+
+
+(define all-comp-tests-1
+  (tests test-composable-11/cc test-composable-11/comp
+	 test-composable-12/cc test-composable-12/comp
+	 test-composable-13/cc test-composable-13/comp))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define-syntax make-composable-test-2
+  (syntax-rules ()
+    ((_ cont-type cont-tag cc cc-body)
+     (lambda ()
+       (wrap-test
+	(call/cp outer-tag
+		 (call/cp (inner-tag inner-tag-1)
+			  (capture-cont cont-type cont-tag)
+			  (with-output (format "After ~a" 'cont-type)))
+		 (call/cp (inner-tag inner-tag-2)
+			  (if cc
+			      (with-output (format "Invoking-continuation ~v" 'cc-body)
+					   cc-body)
+			      (with-output "Continuation was #f")))))))))
+
+
+(define test-composable-23/cc
+  (make-composable-test-2 call-with-current-continuation
+			  inner-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define test-composable-23/comp
+  (make-composable-test-2 call-with-composable-continuation
+			  inner-tag
+			  cc
+			  (cc 'ignore)))
+
+
+(define all-comp-tests-2
+  (tests test-composable-13/cc test-composable-13/comp))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define amb-tag (make-continuation-prompt-tag 'amb))
+
+(define amb-conts (make-parameter '()))
+(define (next-cont!)
+  (define conts (amb-conts))
+  (if (empty? conts)
+      #f
+      (begin
+	(amb-conts (rest conts))
+	(first conts))))
+(define (add-cont! k)
+  (amb-conts (list* k (amb-conts))))
+(define (add-conts! ks)
+  (amb-conts (append ks (amb-conts))))
+
+(define-syntax amb
+  (syntax-rules ()
+    ((_ value ...)
+     (call-with-composable-continuation
+      (lambda (cont)
+	(with-output
+	 (format "In amb for ~a" (list 'value ...))
+	 (add-conts! 
+	  (list (lambda ()
+		  (with-output
+		   (let ((val 'value))
+		     ;; We introduce `val' to avoid lossage of ~v
+		     ;; when `value' is an expression returning
+		     ;; multiple values
+		     (format "Calling continuation for ~v" val))
+		   (cont value))) ...))
+	 (fail)))
+      amb-tag))))
+
+(define (deliver value)
+  (with-output
+   (format "Delivering ~a" value)
+   (call-with-composable-continuation
+    (lambda (cont)
+      (add-cont! (lambda ()
+		   (with-output
+		    (format "Resuming (deliver ~a)" value)
+		    (abort/cc amb-tag 'result (cont 'command-continuation)))))
+      (with-output
+       (format "Deliver: aborting with value ~a" value)
+       (abort/cc amb-tag 'result value)))
+    amb-tag)
+   (void)))
+
+(define (fail)
+  (define cc (next-cont!))
+  (with-output
+   "Failing"
+   (if cc
+       (with-output
+	"Fail: aborting"
+	(abort/cc amb-tag 'result (with-output "Called (cc)" (cc))))
+       (abort/cc amb-tag 'failure #f))))
+
+(define-syntax collect
+  (syntax-rules ()
+    ((_ body ...)
+     (let ((result '()))
+       (define (amb-handler kind value)
+	 (with-output
+	  (format "Calling handler for <~a, ~a>" kind value)
+	  (case kind
+	    ((failure)
+	     (with-output "Failed" (reverse result)))
+	    ((result)
+	     (with-output
+	      (format "Got value ~a, result ~a. Continuing" value result)
+	      (unless (eq? value (void))
+		(set! result (list* value result)))
+	      (call-with-continuation-prompt 
+	       fail amb-tag amb-handler)
+	      (reverse result))))))
+       (with-output
+	"In collect"
+	(parameterize ((amb-conts '()))
+	  (call-with-continuation-prompt
+	   (thunk body ...) amb-tag amb-handler)))))))
+
+(define (amb-test-01)
+  (init!)
+  #;(collect (amb 1 2 3))
+  (printf "Got ~a\n" (collect (amb 1 2 3))))
+
+(define (amb-test-02)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect (amb 1 (collect (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))))
+
+(define (amb-test-03)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect (amb 1
+			(collect (amb 'foo (fail) 'baz))
+			2
+			(fail)
+			(amb 'a 'b 'c)
+			3))))
+
+(define (amb-test-04)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))))
+
+(define (amb-test-05)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+
+(define all-amb-tests
+  (tests amb-test-01 amb-test-02 amb-test-03 amb-test-04))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (run-all-tests [n 0])
+  (for-each (lambda (test)
+	      (printf "Running ~a:\n" (car test))
+	      (call-with-continuation-prompt
+	       (cdr test) (default-continuation-prompt-tag))
+	      (printf "Done\n\n"))
+	    (case n
+	      ((1) all-comp-tests-1)
+	      ((2) all-comp-tests-2)
+	      ((0 amb) all-amb-tests))))
+

@@ -1,0 +1,474 @@
+#lang poem
+
+(require "utils.poem")
+(require "backtracking.poem")
+(require "action-theory.poem")
+
+(provide <pos> x y pos? make-pos
+         <physical-object> position physical-object? position-known?
+         <brick> weight brick? make-brick
+         <robot> name max-load loaded-bricks robot? make-robot
+         all-robots
+         available-load
+         move move-up move-down move-left move-right pick-up)
+
+(defclass <pos> ()
+  x
+  y
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(defmethod equals? ([pos1 <pos>] [pos2 <pos>])
+  (and (= (x pos1) (x pos2))
+       (= (y pos1) (y pos2))))
+
+
+(define (pos x y)
+  (make-pos x y))
+
+(defmethod datum->sexp ([pos <pos>])
+  (list 'pos (x pos) (y pos)))
+
+(defclass <physical-object> (<logical-object>)
+  (name)
+  (position :initvalue (make-pos 0 0) :fluent #t)
+  :autoaccessors #f
+  :auto #t
+  :metaclass <logical-class>)
+
+(defaftermethod initialize ([obj <physical-object>] initargs)
+  (define pos (getarg initargs :position #f))
+  (define token (gensym "position"))
+  (set-variable-value! (current-situation) token pos)
+  (setf! (slot-ref obj 'position) token))
+
+(defmethod datum->sexp ([obj <physical-object>])
+  (list (class-name (class-of obj)) (name obj)))
+
+(defmethod position-known? ([obj <physical-object>])
+  (and (position obj) #t))
+
+(defmethod name ([obj <physical-object>])
+  (slot-ref obj 'name))
+
+(defmethod position ([obj <physical-object>])
+  (variable-value (current-situation) (slot-ref obj 'position)))
+
+(defmethod set-position! ([obj <physical-object>] new-value)
+  (set-variable-value! (current-situation) (slot-ref obj 'position) new-value))
+
+(defclass <brick> (<physical-object>)
+  (weight :fluent #t)
+  :autoaccessors #f
+  :auto #t
+  :metaclass <logical-class>)
+
+(defmethod weight ([obj <brick>])
+  (variable-value (current-situation) (slot-ref obj 'weight)))
+
+(defmethod set-weight! ([obj <brick>] new-value)
+  (set-variable-value! (current-situation) (slot-ref obj 'weight) new-value))
+
+
+(defaftermethod initialize ([obj <brick>] initargs)
+  (define weight (getarg initargs :weight 0.1))
+  (define token (gensym "weight"))
+  (set-variable-value! (current-situation) token weight)
+  (setf! (slot-ref obj 'weight) token))
+
+;;; TODO: This should be stored in the current situation
+(define all-robots (make-parameter empty))
+
+(defclass <robot> (<physical-object>)
+  (max-load :fluent #t)
+  (loaded-bricks :fluent #t)
+  :autoaccessors #f
+  :auto #t
+  :metaclass <logical-class>)
+
+(defmethod max-load ([obj <robot>])
+  (variable-value (current-situation) (slot-ref obj 'max-load)))
+
+(defmethod set-max-load! ([obj <robot>] new-value)
+  (set-variable-value! (current-situation) (slot-ref obj 'max-load) new-value))
+
+(defmethod loaded-bricks ([obj <robot>])
+  (variable-value (current-situation) (slot-ref obj 'loaded-bricks)))
+
+(defmethod set-loaded-bricks! ([obj <robot>] new-value)
+  (set-variable-value! (current-situation) (slot-ref obj 'loaded-bricks) new-value))
+
+
+(defaftermethod initialize ([self <robot>] initargs)
+  (define max-load (getarg initargs :max-load 0.5))
+  (define max-load-token (gensym "max-load"))
+  (set-variable-value! (current-situation) max-load-token max-load)
+  (setf! (slot-ref self 'max-load) max-load-token)
+  (define loaded-bricks (getarg initargs :loaded-bricks empty))
+  (define loaded-bricks-token (gensym "loaded-bricks"))
+  (set-variable-value! (current-situation) loaded-bricks-token loaded-bricks)
+  (setf! (slot-ref self 'loaded-bricks) loaded-bricks-token)
+  (all-robots (cons self (all-robots))))
+
+
+(defmethod pick ((type (singleton <robot>)) &opt pred)
+  (if pred
+      (an-element-of (filter pred (all-robots)))
+      (an-element-of (all-robots))))
+
+(define (sum-all lst)
+  (foldl + 0 lst))
+
+(define (available-load robot)
+  (- (max-load robot) (sum-all (map weight (loaded-bricks robot)))))
+
+
+(defclass <movement-action-type> (<action-type>))
+
+(define-action-type move <movement-action-type> ((obj <physical-object>) (pos <pos>))
+  :precondition (physical-object? obj)
+  (printf "Moving object ~a to position ~a\n"
+          (name obj) (list (x pos) (y pos)))
+  (setf! (position obj) pos))
+
+(define-action-type move-up <movement-action-type> ((obj <physical-object>))
+  :precondition (physical-object? obj)
+  (when (position obj)
+    (setf! (position obj)
+           (make-pos  (x (position obj))
+                      (add1 (y (position obj)))))))
+
+(define-action-type move-down <movement-action-type> ((obj <physical-object>))
+  :precondition (physical-object? obj)
+  (when (position obj)
+    (setf! (position obj)
+           (make-pos  (x (position obj))
+                      (sub1 (y (position obj)))))))
+
+(define-action-type move-left <movement-action-type> ((obj <physical-object>))
+  :precondition (physical-object? obj)
+  (when (position obj)
+    (setf! (position obj)
+           (make-pos  (sub1 (x (position obj)))
+                      (y (position obj))))))
+
+(define-action-type move-right <movement-action-type> ((obj <physical-object>))
+  :precondition (physical-object? obj)
+  (when (position obj)
+    (setf! (position obj)
+           (make-pos  (add1 (x (position obj)))
+                      (y (position obj))))))
+
+(define-action-type pick-up <action-type> ((robot <robot>) (brick <brick>))
+  :precondition (and (robot? robot) (brick? brick)
+                     (equals? (position robot) (position brick))
+                     (>= (available-load robot) (weight brick)))
+  (setf! (loaded-bricks robot)
+         (cons brick (loaded-bricks robot))))
+
+
+(define (simple-example-01)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (datum->sexp (position r1)))
+    (printf "Position of r2: ~a\n" (datum->sexp (position r2)))
+    (printf "Position of r3: ~a\n" (datum->sexp (position r3))))
+  (printf "Initial situation: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (define results
+    (collect () (amb (begin
+                       (printf "First branch\n")
+                       (print-positions)
+                       (move r1 (pos 1 1))
+                       (print-positions)
+                       (move r2 (pos 0 2))
+                       (print-positions)
+                       (move r1 (pos 1 2))
+                       (print-positions)
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation))))
+                     (begin
+                       (printf "Second branch\n")
+                       (print-positions)
+                       (move r2 (pos 2 3))
+                       (print-positions)
+                       (move r3 (pos 1 1))
+                       (print-positions)
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation)))))))
+  (printf "Position of r1: ~a\n" (datum->sexp (position r1)))
+  (printf "Results: ~a\n" (datum->sexp results))
+  (printf "Final situation: ~a\n"
+          (datum->sexp (current-situation))))
+
+(define (simple-example-02)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+          (datum->sexp (current-situation)))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (datum->sexp (current-situation)))
+  (define results
+    (collect () (amb (begin
+                       (printf "First branch\n")
+                       (move r1 (pos 1 1))
+                       (move r2 (pos 0 2))
+                       (move r1 (pos 1 2))
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation)))
+                       (datum->sexp (current-situation)))
+                     (begin
+                       (printf "Second branch\n")
+                       (move r2 (pos 2 3))
+                       (move r3 (pos 1 1))
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation)))
+                       (datum->sexp (current-situation))))))
+  (printf "Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+          (datum->sexp (current-situation))))
+
+(define (simple-example-03)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+          (datum->sexp (current-situation)))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (datum->sexp (current-situation)))
+  (define results
+    (collect () (amb (begin
+                       (printf "First branch\n")
+                       (move r1 (pos 1 1))
+                       (move r2 (pos 0 2))
+                       (move r1 (pos 1 2))
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation)))
+                       (freeze (current-situation)))
+                     (begin
+                       (printf "Second branch\n")
+                       (move r2 (pos 2 3))
+                       (move r3 (pos 1 1))
+                       (printf "Situation: ~a\n"
+                               (datum->sexp (current-situation)))
+                       (freeze (current-situation))))))
+  (printf "Results: ~a\n" (datum->sexp results))
+  (printf "Final situation: ~a\n"
+          (datum->sexp (current-situation))))
+
+
+(define (simple-example-04)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (position r1))
+    (printf "Position of r2: ~a\n" (position r2))
+    (printf "Position of r3: ~a\n" (position r3)))
+  (define results
+    (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
+             (amb (begin
+                    (printf "First branch\n")
+                    (print-positions)
+                    (move r1 (pos 1 1))
+                    (print-positions)
+                    (move r2 (pos 0 2))
+                    (print-positions)
+                    (move r1 (pos 1 2))
+                    (print-positions)
+                    (printf "Situation 1: ~a\n"
+                            (map datum->sexp (actions (current-situation)))))
+                  (begin
+                    (printf "Second branch\n")
+                    (print-positions)
+                    (move r2 (pos 2 3))
+                    (print-positions)
+                    (move r3 (pos 1 1))
+                    (print-positions)
+                    (printf "Situation 2: ~a\n"
+                            (map datum->sexp (actions (current-situation))))
+                    'ok))))
+  (printf "After collection\n")
+  (print-positions)
+  (printf "Final Results: ~a\n" results)
+  (printf "Final situation: ~a\n"
+          (map datum->sexp (actions (current-situation)))))
+
+(define (simple-example-05)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (define (print-positions)
+    (printf "Position of r1: ~a\n" (position r1))
+    (printf "Position of r2: ~a\n" (position r2))
+    (printf "Position of r3: ~a\n" (position r3)))
+  (define (all-robot-positions-known?)
+    (define result
+      (andmap position-known? (list r1 r2 r3)))
+    (printf "all-robot-positions-known? ~a\n" result)
+    result)
+  (define results
+    (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
+             (amb (begin
+                    (printf "First branch\n")
+                    (print-positions)
+                    (move r1 (pos 1 1))
+                    (print-positions)
+                    (move r2 (pos 0 2))
+                    (print-positions)
+                    (move r1 (pos 1 2))
+                    (print-positions)
+                    (printf "Situation: ~a\n"
+                            (map datum->sexp (actions (current-situation))))
+                    (ensure (all-robot-positions-known?)))
+                  (begin
+                    (printf "Second branch (should be aborted immediately)\n")
+                    (move 'something-that-cannot-be-moved (pos 1 2))
+                    (move r2 (pos 2 3))
+                    (print-positions)
+                    (move r3 (pos 1 1))
+                    (ensure (all-robot-positions-known?)))
+                  (begin
+                    (printf "Third branch\n")
+                    (print-positions)
+                    (move r2 (pos 2 3))
+                    (print-positions)
+                    (move r3 (pos 1 1))
+                    (print-positions)
+                    (printf "Situation: ~a\n"
+                            (map datum->sexp (actions (current-situation))))
+                    (ensure (all-robot-positions-known?))))))
+  (print-positions)
+  (printf "Results: ~a\n" results)
+  (printf "All robots: ~a\n" (map name (all-robots)))
+  (printf "Final situation: ~a\n"
+          (map datum->sexp (actions (current-situation)))))
+
+(define (simple-example-05a)
+  (current-situation (make <situation>))
+  (define r1 (make <robot> :name 'r1))
+  (define r2 (make <robot> :name 'r2))
+  (define r3 (make <robot> :name 'r3))
+  (printf "Initial situation: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (move r1 (pos 0 0))
+  (printf "Situation after moving: ~a\n"
+          (map datum->sexp (actions (current-situation))))
+  (define (print-positions)
+    (printf "Positions: ~a, ~a, ~a\n" (position r1)
+            (position r2) (position r3)))
+  (define (all-robot-positions-known?)
+    (define result
+      (andmap position-known? (list r1 r2 r3)))
+    (printf "all-robot-positions-known? ~a\n" result)
+    result)
+  (define results
+    (collect ((make <dfs> :result-strategy (make <commit-result-strategy>)))
+             (amb (begin
+                    (printf "First branch\n")
+                    (print-positions)
+                    (move r1 (pos 1 1))
+                    (print-positions)
+                    (move r2 (pos 0 2))
+                    (print-positions)
+                    (move r1 (pos 1 2))
+                    (print-positions)
+                    (printf "Situation: ~a\n"
+                            (map datum->sexp (actions (current-situation))))
+                    (ensure (all-robot-positions-known?)))
+                  (begin
+                    (printf "Second branch (should be aborted immediately)\n")
+                    (move 'something-that-cannot-be-moved (pos 1 2))
+                    (move r2 (pos 2 3))
+                    (print-positions)
+                    (move r3 (pos 1 1))
+                    (ensure (all-robot-positions-known?)))
+                  (begin
+                    (printf "Third branch\n")
+                    (print-positions)
+                    (move r2 (pos 2 3))
+                    (print-positions)
+                    (move r3 (pos 1 1))
+                    (print-positions)
+                    (printf "Situation: ~a\n"
+                            (map datum->sexp (actions (current-situation))))
+                    (ensure (all-robot-positions-known?))))))
+  (print-positions)
+  (printf "Results: ~a\n" results)
+  (printf "All robots: ~a\n" (map name (all-robots)))
+  (printf "Final situation: ~a\n"
+          (map datum->sexp (actions (current-situation)))))
+
+(define (moves-robot-single-step? action-type)
+  (and (instance-of? action-type <movement-action-type>)
+       (= 1 (length (parameters action-type)))))
+
+(define (simple-example-06)
+  (define brick (make <brick> :position (pos 1 1)))
+  (define r1 (make <robot> :name 'r1 :position (pos 2 1)))
+  (define r2 (make <robot> :name 'r2 :position (pos 0 4)))
+  (define r3 (make <robot> :name 'r3 :position (pos 0 1)))
+  (define (print-var-hash-counter)
+    (printf "Var hash counter: ~a\n" (get-var-hash-counter)))
+  (define result
+    (collect
+     ((make <dfs> :result-strategy (make <n-results-strategy> :number-of-results 5)))
+     (define action (pick <action-type> moves-robot-single-step?))
+     (printf "Action: ~a\n" (name action))
+     (define robot (pick <robot>))
+     (locally
+      (printf "Robot: ~a, pos = ~a\n" (name robot) (datum->sexp (position robot)))
+      (action robot)
+      (pick-up robot brick)
+      (list (name action) (name robot)))))
+  (printf "Result: ~a\n" result))
+
+
+(define (simple-example-06-bad)
+  (define brick (make <brick> :position (pos 1 1)))
+  (define r1 (make <robot> :name 'r1 :position (pos 2 1)))
+  (define r2 (make <robot> :name 'r2 :position (pos 0 4)))
+  (define r3 (make <robot> :name 'r3 :position (pos 0 1)))
+  (define (print-var-hash-counter n)
+    (printf "Var hash counter ~a: ~a\n" n (get-var-hash-counter)))
+  (define result
+    (collect
+     ((make <dfs> :result-strategy (make <n-results-strategy> :number-of-results 5)))
+     ;; (define action (an-integer))
+     (print-var-hash-counter 1)
+     (define action (pick <action-type> moves-robot-single-step?))
+     (print-var-hash-counter 2)
+     (printf "Action: ~a\n" (name action))
+     (define robot (pick <robot>))
+     (print-var-hash-counter 3)
+     (printf "Robot: ~a, pos = ~a\n" (name robot) (datum->sexp (position robot)))
+     (action robot)
+     (print-var-hash-counter 4)
+     (pick-up robot brick)
+     (print-var-hash-counter 5)
+     (list (name action) (name robot))))
+  (printf "Result: ~a\n" result))

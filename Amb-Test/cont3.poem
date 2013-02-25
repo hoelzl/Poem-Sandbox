@@ -1,0 +1,413 @@
+#lang poem
+
+(require racket/control)
+
+(define n 0)
+(define lineno 0)
+       
+(define-syntax with-output
+  (syntax-rules ()
+    ((_ task)
+     (parameterize ((print-reader-abbreviations #t))
+       (inc! n) (inc! lineno)
+       (let ((cnt n))
+	 (printf ";; ~a: == ~a  \t<--- ~a\n"
+		 (~a lineno #:width 4 #:align 'right)
+		 task cnt))))
+    ((_ task body1 body ...)
+     (parameterize ((print-reader-abbreviations #t))
+       (inc! n)
+       (inc! lineno)
+       (let ((cnt n))
+	 (printf ";; ~a: >> ~a  \t<--- ~a\n"
+		 (~a lineno #:width 4 #:align 'right)
+		 task cnt)
+	 (let ((result (begin body1 body ...)))
+	   (inc! lineno)
+	   (printf ";; ~a: << ~a  \t<--- ~a\n"
+		   (~a lineno #:width 4 #:align 'right)
+		   task cnt)
+	   result))))))
+
+(define-syntax call/cp
+  (syntax-rules ()
+    ((_ (prompt-tag prompt-name) body ...)
+     (begin0
+	 (with-output
+	  (format "Establishing prompt ~a" 'prompt-name)
+	  (call-with-continuation-prompt
+	   (thunk 
+	    (with-output
+	     (format "In prompt ~a" 'prompt-name)
+	     body ...))
+	   prompt-tag
+	   (handler 'prompt-name)))
+       (with-output (format "After prompt ~a" 'prompt-name))))
+    ((_ prompt-tag body ...)
+     (call/cp (prompt-tag prompt-tag) body ...))))
+
+(define (init!)
+  (set! n 0)
+  (set! lineno 0))
+
+(define-syntax tests
+  (syntax-rules ()
+    ((_ test ...)
+     (list (cons 'test test) ...))))
+
+;;; Search strategies
+
+(defclass <result-strategy> ())
+
+;; Collect a result.  The value of direct? is #t if this result was
+;; directly aborted to the handler, #f otherwise.  Returns three values:
+;; * Should the result be collected?
+;; * Should the computation continue?
+;; * The real value for the computation, for strategies that have to
+;;   wrap nodes.
+(defgeneric collect-result (strategy node direct?))
+
+(defclass <all-results-strategy> (<result-strategy>))
+
+(defmethod collect-result ((strategy <all-results-strategy>) node direct?)
+  (values (not (eq? node (void))) #t node))
+
+(defclass <one-result-strategy> (<result-strategy>))
+
+(defmethod collect-result ((strategy <one-result-strategy>) node direct?)
+  (values #t #f node))
+
+(defclass <numeric-results-strategy> (<result-strategy>))
+
+(defmethod collect-result ((strategy <numeric-results-strategy>) node direct?)
+  (values (number? node) #t node))
+
+(defclass <search-strategy> ()
+  (result-strategy :initvalue (make <all-results-strategy>))
+  :auto #t
+  :autoaccessors :slot)
+
+(defgeneric next-node! ((strategy <search-strategy>)))
+(defgeneric add-node! ((strategy <search-strategy>) node))
+(defgeneric add-nodes! ((strategy <search-strategy>) nodes))
+
+(defmethod collect-result ((strategy <search-strategy>) node direct?)
+  (collect-result (result-strategy strategy) node direct?))
+
+(defclass <list-search-strategy> (<search-strategy>)
+  (nodes :initvalue '())
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod next-node! ((strategy <list-search-strategy>))
+  (define ks (nodes strategy))
+  (if (empty? ks)
+      #f
+      (begin
+	(setf! (nodes strategy) (rest ks))
+	(first ks))))
+
+
+(defclass <dfs> (<list-search-strategy>))
+
+(defmethod add-node! ((strategy <dfs>) k)
+  (setf! (nodes strategy)
+	 (list* k (nodes strategy))))
+
+(defmethod add-nodes! ((strategy <dfs>) ks)
+  (setf! (nodes strategy)
+	 (append ks (nodes strategy))))
+
+
+(defclass <bfs> (<list-search-strategy>))
+
+(defmethod add-node! ((strategy <bfs>) k)
+  (setf! (nodes strategy)
+	 (append (nodes strategy) (list k))))
+
+(defmethod add-nodes! ((strategy <bfs>) ks)
+  (setf! (nodes strategy)
+	 (append (nodes strategy) ks)))
+
+(defentityclass <ids-node> ()
+  depth
+  value
+  :auto #t
+  :autoaccessors :class-slot)
+
+(defaftermethod initialize ((node <ids-node>) initargs)
+  (set-instance-proc! node (ids-node-value node)))
+
+(defaftermethod set-ids-node-value! ((node <ids-node>) value)
+  (set-instance-proc! node value))
+
+(defclass <ids> (<search-strategy>)
+  (nodes :initvalue '())
+  (initial-nodes :initvalue #f)
+  (max-depth :initvalue 1)
+  (curr-depth :initvalue 0)
+  (need-deepening? :initvalue #f)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ((strategy <ids>) result direct?)
+  (if (or (and (not direct?) (= (max-depth strategy) (curr-depth strategy)))
+	  (and direct? (= (max-depth strategy) (add1 (curr-depth strategy)))))
+      (call-next-method)
+      (values #f #t #f)))
+
+(defmethod next-node! ((strategy <ids>))
+  (define ns (nodes strategy))
+  (cond ((empty? ns)
+	 (cond ((need-deepening? strategy)
+		(with-output "Deepening")
+		(unless (initial-nodes strategy)
+		  (error "Iterative deepening without initial nodes?"))
+		(setf! (need-deepening? strategy) #f)
+		(setf! (max-depth strategy) (add1 (max-depth strategy)))
+		(setf! (nodes strategy) (rest (initial-nodes strategy)))
+		(let ((node (first (initial-nodes strategy))))
+		  (setf! (curr-depth strategy) (ids-node-depth node))
+		  node))
+	       (else #f)))
+	(else
+	 (setf! (nodes strategy) (rest ns))
+	 (let ((node (first ns)))
+	   (setf! (curr-depth strategy) (ids-node-depth node))
+	   node))))
+
+(define (maybe-make-ids-node strategy val)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+	     #f)
+      (begin
+	(with-output (format "Making IDS node at depth ~a"
+			     (add1 (curr-depth strategy))))
+	(make <ids-node>
+	  :depth (add1 (curr-depth strategy))
+	  :value val))))
+
+(define (maybe-make-ids-nodes strategy vals)
+  (if ((curr-depth strategy) . >= . (max-depth strategy))
+      (begin (setf! (need-deepening? strategy) #t) 
+	     #f)
+      (map (lambda (val)
+	     (with-output (format "Making IDS node at depth ~a"
+				  (add1 (curr-depth strategy))))
+	     (make <ids-node>
+	       :depth (add1 (curr-depth strategy))
+	       :value val))
+	   vals)))
+
+(defmethod add-node! ((strategy <ids>) k)
+  (let ((new-node (maybe-make-ids-node strategy k)))
+    (when new-node
+      (unless (initial-nodes strategy)
+	(setf! (initial-nodes strategy) (list new-node)))
+      (setf! (nodes strategy)
+	     (list* new-node (nodes strategy))))))
+
+(defmethod add-nodes! ((strategy <ids>) ns)
+  ;; We suppose that the new nodes are all at the same depth
+  (let ((new-nodes (maybe-make-ids-nodes strategy ns)))
+    (with-output
+     (when new-nodes
+       (unless (initial-nodes strategy)
+	 (setf! (initial-nodes strategy) new-nodes))
+       (setf! (nodes strategy)
+	      (append new-nodes (nodes strategy)))))))
+
+
+;;; Amb and friends
+
+(define amb-tag (make-continuation-prompt-tag 'amb))
+(define amb-search-strategy (make-parameter #f))
+
+(define-syntax amb
+  (syntax-rules ()
+    ((_ value ...)
+     (call-with-composable-continuation
+      (lambda (cont)
+	(with-output
+	 (format "In amb for ~v" '(value ...))
+	 (add-nodes!
+	  (amb-search-strategy)
+	  (list (lambda ()
+		  (with-output
+		   (let ((val 'value))
+		     ;; We introduce `val' to avoid lossage of ~v
+		     ;; when `value' is an expression returning
+		     ;; multiple values
+		     (format "Calling continuation for ~v" val))
+		   (cont value))) ...))
+	 (fail)))
+      amb-tag))))
+
+(define (deliver value)
+  (with-output
+   (format "Delivering ~a" value)
+   (call-with-composable-continuation
+    (lambda (cont)
+      (define strategy (amb-search-strategy))
+      (add-node!
+       strategy
+       (lambda ()
+	 (with-output
+	  (format "Resuming (deliver ~a)" value)
+	  (abort/cc amb-tag 'result (cont 'command-continuation)))))
+      (with-output
+       (format "Deliver: aborting with value ~a" value)
+       (abort/cc amb-tag 'direct-result value)))
+    amb-tag)
+   (void)))
+
+(define (fail)
+  (define cc (next-node! (amb-search-strategy)))
+  (with-output
+   "Failing"
+   (if cc
+       (with-output
+	"Fail: aborting"
+	(abort/cc amb-tag 'result (with-output "Called (cc)" (cc))))
+       (begin
+	 (abort/cc amb-tag 'failure #f)))))
+
+(define-syntax collect
+  (syntax-rules ()
+    ((_ (search-strategy) body ...)
+     (let ((result '()))
+       (define (amb-handler kind value)
+	 (with-output
+	  (format "Calling handler for <~a, ~a>" kind value)
+	  (case kind
+	    ((failure)
+	     (with-output "Failed" (reverse result)))
+	    ((result direct-result)
+	     (let ((v value) (r result))
+	       (with-output
+		(format "Got value ~a, result ~a. Continuing" v r)
+		(let-values (((collect-it? continue? real-value)
+			      (collect-result (amb-search-strategy)
+					      value
+					      (eq? kind 'direct-result))))
+		  (when collect-it?
+		    (set! result (list* value result)))
+		  (when continue?
+		    (call-with-continuation-prompt 
+		     fail amb-tag amb-handler)))
+		(reverse result)))))))
+       (with-output
+	"In collect"
+	(parameterize ((amb-search-strategy search-strategy))
+	  (call-with-continuation-prompt
+	   (thunk body ...) amb-tag amb-handler)))))
+    ((_ () body ...)
+     (collect ((make <dfs>)) body ...))))
+
+(define (amb-test-01)
+  (init!)
+  #;(collect (amb 1 2 3))
+  (printf "Got ~a\n" (collect () (amb 1 2 3))))
+
+(define (amb-test-02)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))))
+
+(define (amb-test-03)
+  (init!)
+  (printf "Got ~a\n" 
+	  (collect () (amb 1
+			   (collect () (amb 'foo (fail) 'baz))
+			   2
+			   (fail)
+			   (amb 'a 'b 'c)
+			   3))))
+
+(define (amb-test-04)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))))
+
+(define (amb-test-05)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05a)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ((make <bfs>))
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05b)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ((make <ids>))
+		   (deliver 'a)
+		   (deliver (amb 1 2 3))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05c)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ()
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05d)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ((make <ids>))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05e)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-05f)
+  (init!)
+  (printf "Got ~a\n"
+	  (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
+		   (deliver 'a)
+		   (deliver (amb 1 (amb 2 3) 4))
+		   (amb 'foo 'bar))))
+
+(define (amb-test-06)
+  (init!)
+  (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+(define (amb-test-06a)
+  (init!)
+  (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+(define all-amb-tests
+  (tests amb-test-01 amb-test-02 amb-test-03 amb-test-04
+	 amb-test-05 amb-test-05a amb-test-05b
+	 amb-test-06))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define (run-all-tests [n 0])
+  (for-each (lambda (test)
+	      (printf "Running ~a:\n" (car test))
+	      (call-with-continuation-prompt
+	       (cdr test) (default-continuation-prompt-tag))
+	      (printf "Done\n\n"))
+	    (case n
+	      ((0 amb) all-amb-tests))))
+

@@ -1,0 +1,14 @@
+#lang poem
+
+(require "backtracking.poem")
+(require "action-theory.poem")
+
+(provide (rename-out (amb choose))
+	 search)
+
+(define-syntax search
+  (syntax-rules ()
+    ((_ exp ...)
+     (parameterize ((current-situation (copy-situation (current-situation))))
+       exp ...))))
+

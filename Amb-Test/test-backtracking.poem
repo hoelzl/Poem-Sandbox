@@ -1,0 +1,498 @@
+#lang poem
+
+(require "backtracking.poem")
+(require (rename-in rackunit (fail fail-test)))
+(require rackunit/text-ui)
+
+(provide var-suite
+	 amb-suite
+	 medium-amb-suite
+	 big-amb-suite)
+
+(define-test-suite var-suite
+  (test-case
+   "var 1"
+   (define var (make <var>))
+   (setf! (value var) 123)
+   (locally
+    (setf! (value var) 234)
+    (check-equal? (value var) 234))
+   (check-equal? (value var) 123))
+  
+  ;; The following two test cases contain some hairy control flow, so
+  ;; I've left in some (commented out) `printf' statements that make
+  ;; it easy to verify that the expected things actually happen. --tc
+
+  (test-case
+   "var 2"
+   (define var (make <var>))
+   ;; (printf "var = 123\n")
+   (setf! (value var) 123)
+   (define cont #f)
+   (define count 0)
+   ;; (printf "Before saving vars\n")
+   (locally
+    (begin
+      ;; (printf "In begin\n")
+      (setf! (value var) 234)
+      (let/cc k
+	      (set! cont k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 234))
+      (inc! count)
+      (when (count . > . 2)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 234\n")
+      (check-equal? (value var) 234)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)
+   (when (and cont (procedure? cont))
+     (begin
+       ;; (printf "Invoking cont\n")
+       (cont 'ignore)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123))
+
+  (test-case
+   "var 3"
+   (define var (make <var>))
+   ;; (printf "var = 123\n")
+   (setf! (value var) 123)
+   (define cont #f)
+   (define cont-1 #f)
+   (define cont-2 #f)
+   (define count 0)
+   (define (switch-cont!)
+     ;; (printf "Switching continuation\n")
+     (cond [(or (and (not cont) (count . < . 5)) (eq? cont cont-2))
+	    ;; (printf "Setting cont to cont-1\n")
+	    (set! cont cont-1)]
+	   [(eq? cont cont-1)
+	    ;; (printf "Setting cont to cont-2\n")
+	    (set! cont cont-2)]
+	   [else
+	    ;; (printf "Setting cont to #f\n")
+	    (set! cont #f)]))
+   ;; (printf "Before saving vars\n")
+   (locally
+    (begin
+      ;; (printf "In begin 1\n")
+      (setf! (value var) 234)
+      (let/cc k
+	      (set! cont-1 k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 234))
+      (inc! count)
+      (when (count . > . 5)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 234\n")
+      (check-equal? (value var) 234)))
+   (locally
+    (unless (eq? cont cont-1)
+      ;; (printf "In begin 2\n")
+      (setf! (value var) 345)
+      (let/cc k
+	      (set! cont-2 k)
+	      ;; (printf "In k\n")
+	      (check-equal? (value var) 345))
+      (inc! count)
+      (when (count . > . 5)
+	(set! cont #f))
+      ;; (printf "After k\n")
+      ;; (printf "var = 345\n")
+      (check-equal? (value var) 345)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)
+   (switch-cont!)
+   (when (and cont (procedure? cont))
+     (begin
+       ;; (printf "Invoking cont\n")
+       (cont 'ignore)))
+   ;; (printf "var = 123\n")
+   (check-equal? (value var) 123)))
+
+
+(define-test-suite amb-suite
+  (test-case
+   "Amb Test 10"
+   (check-equal?
+    (collect () 1 2 3)
+    '(3)))
+
+  (test-case
+   "Amb Test 11"
+   (check-equal?
+    (collect () (amb 1 2 3))
+    '(1 2 3)))
+
+  (test-case
+   "Amb Test 12"
+   (check-equal?
+    (collect ()
+	     (amb 1 2 3)
+	     (fail))
+    '()))
+
+  (test-case
+   "Amb Test 13"
+   (check-equal?
+    (collect () (amb 1 2 (amb 'a 'b 'c) 3))
+    '(1 2 a b c 3)))
+
+  (test-case
+   "Amb Test 13a"
+   (check-equal?
+    (collect () (an-integer-between 3 6))
+    '(3 4 5 6)))
+
+  (test-case
+   "Amb Test 13b"
+   (check-equal?
+    (collect () (let ([x (an-integer-between 3 6)])
+		  x))
+    '(3 4 5 6)))
+
+  (test-case
+   "Amb Test 13c"
+   (check-equal?
+    (collect () (let ([x (an-integer-between 3 6)])
+		  (if (even? x)
+		      x
+		      (fail))))
+    '(4 6)))
+
+  (test-case
+   "Amb Test 13d"
+   (check-equal?
+    (collect () (amb 1 (fail) 2))
+    '(1 2)))
+
+  (test-case
+   "Amb Test 13e"
+   (check-equal?
+    (collect () (amb (fail) 1 2))
+    '(1 2)))
+
+  (test-case
+   "Amb Test 13f"
+   (check-equal?
+    (collect () (amb 1 (fail) 2 3 4))
+    '(1 2 3 4)))
+
+  (test-case
+   "Amb Test 13g"
+   (check-equal?
+    (collect () (amb 1 (fail) 2 3 4 (fail)))
+    '(1 2 3 4)))
+
+  (test-case
+   "Amb Test 13h"
+   (check-equal?
+    (collect () (let ([x (amb 3 4 5 6)])
+		  (if (even? x)
+		      x
+		      (fail))))
+    '(4 6)))
+
+  (test-case
+   "Amb Test 14"
+   (check-equal?
+    (collect ()
+	     (let ([x (amb 1 2 3 4 5)]
+		   [y (amb 2 4 6)])
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
+    '((2 6) (4 4) (4 6))))
+
+  (test-case
+   "Amb Test 14a"
+   (check-equal?
+    (collect ()
+	     (let ([x (an-integer-between 1 10)]
+		   [y (an-integer-between 1 10)])
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
+    '((2 6) (2 8) (2 10)
+      (4 4) (4 6) (4 8) (4 10)
+      (6 2) (6 4) (6 6) (6 8) (6 10)
+      (8 2) (8 4) (8 6) (8 8) (8 10)
+      (10 2) (10 4) (10 6) (10 8) (10 10))))
+
+
+  (test-case
+   "Amb Test 14b"
+   (check-equal?
+    (collect ()
+	     (let ([x (an-integer-between* 1 10)]
+		   [y (an-integer-between* 1 10)])
+	       (if (and (even? x) (even? y)
+			(>= (+ x y) 7))
+		   (list x y)
+		   (fail))))
+
+    '((2 6) (2 8) (2 10)
+      (4 4) (4 6) (4 8) (4 10)
+      (6 2) (6 4) (6 6) (6 8) (6 10)
+      (8 2) (8 4) (8 6) (8 8) (8 10)
+      (10 2) (10 4) (10 6) (10 8) (10 10))))
+
+  (let ([gen-numbers
+	 (lambda ()
+	   (let ([x (an-integer-between 1 6)]
+		 [y (an-integer-between 1 6)])
+	     (if (and (even? x) (even? y)
+		      (>= (+ x y) 7))
+		 (list x y)
+		 (fail))))])
+    (test-case
+     "Amb Test 14c"
+     (check-equal?
+      (collect ()
+	       (gen-numbers))
+      '((2 6) (4 4) (4 6) (6 2) (6 4) (6 6)))))
+
+  (test-case
+   "Amb Test 15"
+   (check-equal?
+    (collect ((make <dfs> :result-strategy (make <one-result-strategy>)))
+	     (let ([x (an-integer->= 1)])
+	       (when (< x 10)
+		 (fail))
+	       x))
+    '(10)))
+
+  (test-case
+   "Amb Test 15a"
+   (check-equal?
+    (collect ((make <dfs> :result-strategy (make <n-results-strategy>
+					     :number-of-results 5)))
+	     (let ([x (an-integer->= 1)])
+	       (when (< x 10)
+		 (fail))
+	       x))
+    '(10 11 12 13 14)))
+
+  (test-case
+   "Amb Test 16"
+   (check-equal?
+    (collect ()
+	     (define my-fun (lambda args (* (apply + args) (apply * args))))
+	     (define fun (amb + - * my-fun))
+	     (list (object-name fun) (fun 1 2 3 4)))
+    '((+ 10) (- -8) (* 24) (my-fun 240))))
+
+;;; New tests
+
+  (test-case
+   "Amb Test 21"
+   (check-equal?
+    (collect () (amb 1 2 3))
+    '(1 2 3)))
+
+  (test-case
+   "Amb Test 22"
+   (check-equal?
+    (collect () (amb 1 (collect () (amb 'foo 'bar 'baz)) 2 (amb 'a 'b 'c) 3))
+    '(1 (foo bar baz) 2 a b c 3)))
+
+  (test-case
+   "Amb Test 23"
+   (check-equal?
+    (collect () (amb 1
+		     (collect () (amb 'foo (fail) 'baz))
+		     2
+		     (fail)
+		     (amb 'a 'b 'c)
+		     3))
+    '(1 (foo baz) 2 a b c 3)))
+
+  (test-case
+   "Amb Test 24"
+   (check-equal?
+    (collect ()
+	     (amb 1 (begin (deliver 'a) (amb 4 5 6)) 2 (deliver 'b) 3))
+    '(1 a 4 5 6 2 b 3)))
+
+  (test-case
+   "Amb Test 25"
+   (check-equal?
+    (collect ()
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 foo bar 2 foo bar 3 foo bar)))
+
+
+  (test-case
+   "Amb Test 25a"
+   (check-equal?
+    (collect ((make <bfs>))
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 2 3 foo bar foo bar foo bar)))
+
+
+  (test-case
+   "Amb Test 25b"
+   (check-equal?
+    (collect ((make <ids>))
+	     (deliver 'a)
+	     (deliver (amb 1 2 3))
+	     (amb 'foo 'bar))
+    '(a 1 2 3 foo bar foo bar foo bar)))
+
+
+  (test-case
+   "Amb Test 25c"
+   (check-equal?
+    (collect ()
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a 1 foo bar 2 foo bar 3 foo bar 4 foo bar)))
+
+  (test-case
+   "Amb Test 25d"
+   (check-equal?
+    (collect ((make <ids>))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a 1 4 foo bar 2 3 foo bar foo bar foo bar)))
+
+  (test-case
+   "Amb Test 25e"
+   (check-equal?
+    (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(a)))
+
+  (test-case
+   "Amb Test 25f"
+   (check-equal?
+    (collect ((make <ids> :result-strategy (make <numeric-results-strategy>)))
+	     (deliver 'a)
+	     (deliver (amb 1 (amb 2 3) 4))
+	     (amb 'foo 'bar))
+    '(1 4 2 3)))  
+
+  ;; (define (nd)
+  ;;   (display "(1) ")
+  ;;   (deliver 'a)
+  ;;   (display "(2) ")
+  ;;   (deliver (amb 1 (amb 2 3) 4))
+  ;;   (display "(3) ")
+  ;;   (amb 'foo 'bar))
+
+  ;; (test-case "Amb Test 25g"
+  ;;   (collect () (nd)))
+
+  ;; (test-case "Amb Test 25h"
+  ;;   (collect ((make <dfs>)) (nd)))
+
+  ;; (test-case "Amb Test 25i"
+  ;;   (collect ((make <bfs>)) (nd)))
+
+  ;; (test-case "Amb Test 25j"
+  ;;   (collect ((make <ids>)) (nd)))
+
+  ;; (test-case "Amb Test 26"
+  ;;   (collect ((make <ids>)) (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+  ;; (test-case "Amb Test 26a"
+  ;;   (collect ((make <ids> :result-strategy (make <one-result-strategy>)))
+  ;; 	   (amb 1 2 (amb 'a (amb 'x 'y) 'b) 3)))
+
+  (test-case
+   "Amb Test 30"
+   (define v (make <var> :value 'xxx))
+   (check-equal?
+    (collect ((make <ids>))
+	     (amb (deliver (begin (setf! (value v) 'a)
+				  'a))
+		  (deliver (begin (setf! (value v) 'b)
+				  'b)))
+	     (deliver (amb (begin
+			     (setf! (value v) 'a)
+			     (if (equal? (value v) 'a) 1 11))
+			   (begin
+			     (if (equal? (value v) 'a) 2 22))))
+
+	     (amb 'foo (value v) 'bar)) 
+    '(  a   b
+        1   2
+        1  22
+      foo   a bar
+      foo   a bar
+      foo   a bar
+      foo   b bar))))
+
+(define-test-suite medium-amb-suite
+  amb-suite
+
+  (test-case
+   "Amb Test 14d"
+   (collect ()
+     (let ([x (an-integer-between 1 33)]
+	   [y (an-integer-between 1 33)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14e"
+    (collect ()
+     (let ([x (an-integer-between 1 50)]
+	   [y (an-integer-between 1 50)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14e*"
+    (collect ()
+     (let ([x (an-integer-between* 1 50)]
+	   [y (an-integer-between* 1 50)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14e**"
+    (collect ()
+     (let ([x (an-integer-between** 1 50)]
+	   [y (an-integer-between** 1 50)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail))))))
+
+(define-test-suite big-amb-suite
+  medium-amb-suite
+
+  (test-case "Amb Test 14f"
+    (collect ()
+     (let ([x (an-integer-between 1 100)]
+	   [y (an-integer-between 1 100)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail)))))
+
+  (test-case "Amb Test 14g"
+    (collect ((make <ids>))
+     (let ([x (an-integer-between 1 100)]
+	   [y (an-integer-between 1 100)])
+       (if (and (even? x) (even? y)
+  	      (>= (+ x y) 7))
+  	 (list x y)
+  	 (fail))))))

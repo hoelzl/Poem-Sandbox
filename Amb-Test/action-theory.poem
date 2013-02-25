@@ -1,0 +1,333 @@
+#lang poem
+
+(require "utils.poem")
+(require "backtracking.poem")
+
+(provide <situation>
+         actions
+	 variable-values variable-value set-variable-value!
+         current-situation
+         do!
+	 freeze-situation
+	 <commit-result-strategy>
+
+         <logical-class>
+         <logical-object>
+         <action-type>
+	 make-action-proc
+         name
+         parameters
+         precondition
+         effect-axiom
+	 proc-body
+         assert
+         all-action-type-names all-action-types
+         action-type-name? get-action-type
+         define-action-type
+         @pre
+
+         <action>
+         action-type
+         arguments
+	 add-action!
+	 signature
+
+         <fluent>
+         axiom
+         all-fluent-names
+         fluent-name? get-fluent
+         define-fluent)
+
+
+;;; The `actions' slot of <situation> is preserved by bactracking
+;;; search.  Therefore it is kept constant as a <var> instance, the
+;;; actual values are managed by setting or retreiving the value of
+;;; the var.  The `initialize', `actions' and `set-actions!' methods
+;;; should actually be generated automatically.
+(defclass <situation> ()
+  (actions :initvalue (make <var> :value '()))
+  (variable-values :initvalue (make <var> :value (make-immutable-hasheq)))
+  :auto #t
+  :autoaccessors #f)
+
+(defmethod actions ([sit <situation>])
+  (value (slot-ref sit 'actions)))
+
+(defmethod set-actions! ([sit <situation>] new-actions)
+  (set-value! (slot-ref sit 'actions) new-actions))
+
+(defmethod variable-values ([sit <situation>])
+  (slot-ref sit 'variable-values))
+
+(defmethod variable-value ([sit <situation>] var-desc &optional [default #f])
+  (hash-ref (value (slot-ref sit 'variable-values)) var-desc default))
+
+(defmethod set-variable-value! ([sit <situation>] var-desc new-value)
+  (set-value! (slot-ref sit 'variable-values)
+	      (hash-set (value (slot-ref sit 'variable-values))
+			var-desc new-value)))
+
+(defmethod datum->sexp ([sit <situation>])
+  (datum->sexp (actions sit)))
+
+(define current-situation-var
+  (make <var> :value (make <situation>)))
+
+(define current-situation
+  (case-lambda 
+    [()
+     (value current-situation-var)]
+    [(new-value)
+     (set-value! current-situation-var new-value)]))
+
+(define (do! action situation)
+  (define new-var (make <var> :value (cons action (actions situation))))
+  (make-situation new-var))
+
+(defclass <frozen-situation> (<situation>)
+  (actions :initvalue '()))
+
+(defmethod actions ([sit <frozen-situation>])
+  (slot-ref sit 'actions))
+
+(defmethod set-actions! ([sit <frozen-situation>] new-actions)
+  (slot-set! sit 'actions new-actions))
+
+(define (freeze-situation situation)
+  (make <frozen-situation> :actions (actions situation)))
+
+(defmethod freeze ([sit <situation>])
+  (freeze-situation sit))
+
+
+(defclass <commit-result-strategy> (<one-result-strategy>)
+  (saved-situation)
+  :auto #t
+  :autoaccessors :slot)
+
+(defmethod collect-result ([strategy <commit-result-strategy>] node)
+  (define node-is-void? (eq? node (void)))
+  (cond [node-is-void?
+	 #t]
+	[else
+	 (setf! (result strategy) node)
+	 (printf "Saving situation ~a\n" (datum->sexp (current-situation)))
+	 (setf! (saved-situation strategy) (freeze (current-situation)))
+	 #f]))
+
+(defmethod after-collection-hook ([strategy <commit-result-strategy>])
+  (printf "Committing situation ~a\n" (datum->sexp (saved-situation strategy)))
+  (current-situation (saved-situation strategy)))
+
+
+;;; Fluents
+;;; =======
+
+(define all-fluent-names (make-hash))
+
+(define (fluent-name? name)
+  (and (hash-ref all-fluent-names name #f) #t))
+
+(define (get-fluent name)
+  (hash-ref all-fluent-names name))
+
+(defclass <fluent> ()
+  name
+  axiom
+  :auto #t
+  :autoaccessors :slot
+  :printer #t)
+
+;;; Maybe generate `name?' as a predicate for the fluent?
+(define (maybe-make-fluent name)
+  (unless (hash-ref all-fluent-names name #f)
+    (hash-set! all-fluent-names name (make-fluent name))))
+
+(define-syntax-rule (define-fluent name axiom)
+  (make-fluent 'name 'axiom))
+
+(defclass <logical-class> (<class>)
+  :printer #t)
+
+(define (compute-slots-for-fluent-class class slots)
+  (for/list ([slot (in-list slots)])
+    (cond [(getarg (rest slot) :fluent #f)
+	   ;; (printf "Creating fluent ~a\n" (first slot))
+	   (maybe-make-fluent (first slot))
+	   (list* (first slot)
+		  :initializer (thunk (make <var>))
+		  (rest slot))]
+	  [slot])))
+
+;;; TODO: initialize slots with vars and generate getters and setters
+;;; similar to `actions' for <situation>.
+(defmethod compute-slots ([class <logical-class>])
+  (compute-slots-for-fluent-class class (call-next-method)))
+
+#;
+(define-syntax (make-fluent-accessors stx)
+  (syntax-case stx ()
+    [(_ class name)
+     #'(defmethod name ([self class])
+	 (value (slot-ref self 'name)))]))
+
+(defclass <logical-object> ()
+  :printer #t)
+
+(define all-action-type-names (make-hash))
+
+(define (action-type-name? name)
+  (and (hash-ref all-action-type-names name #f) #t))
+
+(define (get-action-type name)
+  (hash-ref all-action-type-names name))
+
+(define (all-action-types)
+  (hash-values all-action-type-names))
+
+(defentityclass <action-type> ()
+  name
+  (parameters :initivalue '())
+  (parameter-types :initvalue '())
+  (precondition :initvalue '())
+  (effect-axiom :initvalue '())
+  (proc-body :initvalue '())
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(define (make-action-proc action-name parameters precondition body)
+  #`(lambda #,parameters
+      (assert #,precondition)
+      (current-situation (do! (make-action
+			       #,action-name (list #,@parameters))
+			      (current-situation)))
+      . #,body))
+
+(define-for-syntax (make-action-proc action-name parameters precondition body)
+  `(lambda ,parameters
+      (assert ,precondition)
+      (current-situation (do! (make-action
+			       ,action-name (list ,@parameters))
+			      (current-situation)))
+      ,@body))
+
+(defaftermethod initialize ([action <action-type>] initargs)
+  (hash-set! all-action-type-names (name action) action)
+  #;
+  (set-instance-proc! act (make-action-proc action)))
+
+
+(defmethod datum->sexp ([act <action-type>])
+  (name act))
+
+
+(defmethod signature ([act <action-type>])
+  (list* (name act) (parameter-types act)))
+
+(defmethod pick ([action (singleton <action-type>)] &opt pred)
+  (if pred
+      (an-element-of (filter pred (all-action-types)))
+      (an-element-of (all-action-types))))
+
+(defclass <action> ()
+  action-type
+  arguments
+  :printer #t
+  :autoaccessors :slot
+  :auto #t)
+
+(defmethod add-action! ([sit <situation>] [act <action>])
+  (set-actions! sit (list* act (actions sit))))
+
+(defmethod name ([act <action>])
+  (name (action-type act)))
+
+(defmethod signature ([act <action>])
+  (signature (action-type act)))
+
+(define (convert-to-axiom id args precondition body)
+  body)
+
+(defmethod datum->sexp ([act <action>])
+  (list* (name act) (map datum->sexp (arguments act))))
+
+(define-syntax define-action-type
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ id class ((arg type) ...)
+          :precondition precondition
+          exp ...)
+       #'(define id
+           (let ([act (make class
+                        :name 'id
+                        :parameters '(arg ...)
+			:parameter-types (list type ...)
+                        :precondition 'precondition
+			:proc-body '(exp ...)
+                        :effect-axiom (convert-to-axiom
+				       'id '(arg ...) 'precondition '(exp ...)))])
+	     (set-instance-proc! 
+	      act
+	      (lambda (arg ...)
+		(unless precondition (fail))
+		(current-situation (do! (make-action
+					 id (list arg ...))
+					(current-situation)))
+		exp ...))
+             act))]
+      [(_ id args exp ...)
+       #'(define-action-type id args :precondition true exp ...)])))
+
+(define (@pre exp)
+  exp)
+
+
+;;; TODO: Argument list for fluent?
+;;; Declare sorts for each type of logical objects
+;;; Declare constructors for each sort
+
+(define (generate-domain-theory)
+  (generate-successor-state-axioms))
+
+(define (generate-successor-state-axioms)
+  (for ((fluent-name (in-hash-keys all-fluent-names)))
+    (generate-successor-state-axiom-for-fluent fluent-name)))
+
+(defclass <successor-state-part> ()
+  axiom-head
+  previous-value
+  :autoaccessors #t
+  :auto #t)
+
+#||
+;; (generate-successor-state-axiom-for-fluent position)
+(effect-axiom (get-action-type 'move))
+  => (equals? (position obj) pos)
+(make-successor-state-part '(position obj (do (move obj pos) sit))
+                           'pos)
+(effect-axiom (get-action-type 'move-up))
+  => (equals? (position obj)
+              (make-position (@pre (x (position obj)))
+                             (+ 1 (@pre (y (position obj))))))
+(make-successor-state-part '(position obj (do (move-up obj) sit))
+                           '(make-position (x (position obj sit))
+                                           (+ 1 (y (position obj sit)))))
+||#
+
+(define (generate-successor-state-axiom-for-fluent fluent-name)
+  (let ([parts (generate-successor-state-parts-for-fluent fluent-name)])
+    (build-successor-state-axiom-from-parts parts)))
+
+(define (generate-successor-state-parts-for-fluent fluent-name)
+  (for/list ([(action-type-name action) (in-hash all-action-type-names)])
+    (let-values ([(relevant? new-formula previous-formula)
+                  (extract-successor-state-parts action fluent-name)])
+      ; #:break (not relevant?)
+      (make-successor-state-part new-formula previous-formula))))
+
+(define (build-successor-state-axiom-from-parts)
+  #f)
+
+(define (extract-successor-state-parts action fluent-name)
+  #f)

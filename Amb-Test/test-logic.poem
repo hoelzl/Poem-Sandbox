@@ -1,0 +1,437 @@
+#lang poem
+
+(require rackunit)
+(require rackunit/text-ui)
+(require "logic.poem")
+
+(provide relations-suite
+	 unification-suite
+	 logic-suite)
+
+(define-simple-check (check-logical-variable var var-name)
+  (check-not-false (instance-of? var  <logic-variable>))
+  (check-equal? (name var) var-name))
+
+(define-simple-check (check-renamed-variables lhs rhs)
+  (cond [(logic-variable? lhs)
+	 (check-pred logic-variable? rhs "Not a logic variable")
+	 (check-not-eq? lhs rhs "Logic variables are equal")
+	 (check-eq? (name lhs) (name rhs) "Names differ")]
+	[(pair? lhs)
+	 (check-pred pair? rhs "Not a pair")
+	 (check-renamed-variables (car lhs) (car rhs))
+	 (check-renamed-variables (cdr lhs) (cdr rhs))]
+	[else
+	 (check-eq? lhs rhs "Not variables and not equal")]))
+
+(define-test-suite relations-suite
+
+  (test-case
+   "name+arity->functor"
+   (check-equal? (name+arity->functor 'foo 2) 'foo/2)
+   (check-equal? (name+arity->functor 'foo/2 2) 'foo/2)
+   (check-equal? (name+arity->functor 'foo/1 2) 'foo/1/2)
+   (check-equal? (name+arity->functor '/ 2) '//2))
+
+  #;
+  (test-case
+   "predicate-names->functors"
+   (check-equal? (predicate-names->functors '?x) '?x)
+   (check-equal? (predicate-names->functors '(foo ?x ?y)) '(foo/2 ?x ?y))
+   (check-equal? (predicate-names->functors '(bar)) '(bar/0))
+   (check-equal? (predicate-names->functors '(foo (bar ?x) (baz ?x ?y)))
+		 '(foo/2 (bar/1 ?x) (baz/2 ?x ?y)))
+   (check-equal? (predicate-names->functors '((foo ?x))) '((foo/1 ?x))))
+
+  (test-case
+   "logic-variable-name"
+   (check-true (logic-variable-name? '?x))
+   (check-false (logic-variable-name? 'x)))
+
+  (test-case
+   "introduce-logic-variables 1"
+   (define-values (term subst) (introduce-logic-variables '(foo ?x 1 ?y)))
+   (check-pred pair? term)
+   (check-equal? (length term) 4)
+   (check-equal? (first term) 'foo)
+   (check-logical-variable (second term) '?x)
+   (check-equal? (third term) 1)
+   (check-logical-variable (fourth term) '?y))
+
+  (test-case
+   "parse-functor-name 1"
+   (check-exn #rx"^Functor name is not a symbol: \"foo/2\""
+	      (thunk (parse-functor-name "foo/2")))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo"
+	      (thunk (parse-functor-name 'foo)))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo/"
+	      (thunk (parse-functor-name 'foo/)))
+   (check-exn #rx"^Functor name is not of the form name/arity: /2"
+	      (thunk (parse-functor-name '/2)))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo/bar"
+	      (thunk (parse-functor-name 'foo/bar))))
+
+  (test-case
+   "parse-functor-name 2"
+   (define-values (name arity) (parse-functor-name 'foo/2))
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-name 3"
+   (define-values (name arity) (parse-functor-name '//2))
+   (check-equal? name '/)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 1"
+   (check-exn #rx"^Functor name is not a symbol: \"foo\"$"
+	      (thunk (parse-functor-description "foo" "bar" "2")))
+   (check-exn #rx"^Relation name is not a symbol: \"bar\"$"
+	      (thunk (parse-functor-description 'foo/2 "bar" "2")))
+   (check-exn #rx"^Arity is not a non-negative integer: \"2\"$"
+	      (thunk (parse-functor-description 'foo/2 'bar "2")))
+   (check-exn #rx"^Name and arity do not match functor: bar 2 foo/2$"
+	      (thunk (parse-functor-description 'foo/2 'bar 2)))
+   (check-exn #rx"^Name and arity do not match functor: foo 3 foo/2$"
+	      (thunk (parse-functor-description 'foo/2 'foo 3))))
+
+  (test-case
+   "parse-functor-description 2"
+   (define-values (functor name arity)
+     (parse-functor-description 'foo/2 'foo 2))
+   (check-equal? functor 'foo/2)
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 3"
+   (define-values (functor name arity)
+     (parse-functor-description #f 'foo 2))
+   (check-equal? functor 'foo/2)
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 4"
+   (check-exn #rx"^Functor name is not of the form name/arity: foo$"
+	      (thunk (parse-functor-description 'foo #f #f)))
+   (check-exn #rx"^Functor name is not of the form name/arity: foo/bar$"
+	      (thunk (parse-functor-description 'foo/bar 'foo #f)))
+   (check-exn #rx"^Functor name is not of the form name/arity: /123$"
+	      (thunk (parse-functor-description '|/123| #f 123))))
+
+  (test-case
+   "parse-functor-description 5"
+   (define-values (functor name arity)
+     (parse-functor-description 'foo/2 #f #f))
+   (check-equal? functor 'foo/2)
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 6"
+   (check-exn #rx"^Functor name and relation name do not match: foo/2 bar$"
+	      (thunk (parse-functor-description 'foo/2 'bar #f))))
+
+  (test-case
+   "parse-functor-description 7"
+   (define-values (functor name arity)
+     (parse-functor-description 'foo/2 'foo #f))
+   (check-equal? functor 'foo/2)
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 8"
+   (define-values (functor name arity)
+     (parse-functor-description 'foo/2 #f 2))
+   (check-equal? functor 'foo/2)
+   (check-equal? name 'foo)
+   (check-equal? arity 2))
+
+  (test-case
+   "parse-functor-description 9"
+   (check-exn #rx"^Functor arity and explicit arity do not match: 2 3$"
+	      (thunk (parse-functor-description 'foo/2 #f 3))))
+
+  (test-case
+   "parse-functor-description 10"
+   (check-exn #rx"^Neither name \\+ arity nor functor were specified.$"
+	      (thunk (parse-functor-description #f 'foo #f))))
+
+  (test-case
+   "parse-functor-description 11"
+   (check-exn #rx"^Neither name \\+ arity nor functor were specified.$"
+	      (thunk (parse-functor-description #f #f 3))))
+
+  (test-case
+   "make <relation> 1"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-equal? (name f/2-rel) 'f)
+   (check-equal? (arity f/2-rel) 2)
+   (check-equal? (functor f/2-rel) 'f/2)
+   (check-equal? (clauses f/2-rel) '()))
+
+  (test-case
+   "make <relation> 2"
+   (clear-all-relations)
+   (let ([clause (make <horn-fact> :functor 'f/2 :head '(f/2 ?x ?y))])
+     (check-exn #rx"Adding initial clauses currently not supported;"
+		(thunk (make <relation>
+			 :name 'f :arity 2
+			 :clauses (list clause))))))
+
+
+  (test-case
+   "find-relation 1"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-equal? (find-relation 'f 2) f/2-rel)
+   (check-equal? (find-relation 'f/2) f/2-rel))
+
+  (test-case
+   "find-relation 2"
+   (clear-all-relations)
+   (define f/2-rel (make <relation> :name 'f :arity 2))
+   (check-false (find-relation 'f 1))
+   (check-false (find-relation 'f/1)))
+
+  (test-case
+   "functor-and-term-compatible?"
+   (check-true (functor-and-term-compatible? 'foo/2 '(foo/2 ?x ?y)))
+   (check-false (functor-and-term-compatible? 'foo/2 '(foo/3 ?x ?y ?z)))
+   (check-false (functor-and-term-compatible? 'foo/2 'foo/2)))
+
+  (test-case
+   ":- 1"
+   (clear-all-relations)
+   (let ([clause (:- (f ?x ?y))])
+     (check instance-of? clause <horn-fact>)
+     (check-equal? (functor clause) 'f/2)
+     (define hd (head clause))
+     (check instance-of? hd <relation-term>)
+     (check-equal? (functor hd) 'f/2)
+     (check-equal? (arity hd) 2)
+     (check-logical-variable (first (arguments hd)) '?x)
+     (check-logical-variable (second (arguments hd)) '?y)
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
+  
+  (test-case
+   ":- 2"
+   (clear-all-relations)
+   (let ([clause (:- (f ?x ?y) (g ?x ?y))])
+     (check instance-of? clause <horn-rule>)
+     (check-equal? (functor clause) 'f/2)
+     (define hd (head clause))
+     (check instance-of? hd <relation-term>)
+     (check-equal? (functor hd) 'f/2)
+     (check-equal? (arity hd) 2)
+     (check-logical-variable (first (arguments hd)) '?x)
+     (check-logical-variable (second (arguments hd)) '?y)
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))
+     (define bd (body clause))
+     (check instance-of? bd <list>)
+     (check-equal? (length bd) 1)
+     (define bc (first bd))
+     (check-equal? (functor bc) 'g/2)
+     (check-equal? (arity bc) 2)
+     (check-logical-variable (first (arguments bc)) '?x)
+     (check-logical-variable (second (arguments bc)) '?y)
+     (check-eq? (first (arguments hd)) (first (arguments bc)))
+     (check-eq? (second (arguments hd)) (second (arguments bc)))
+     (check-equal? (clauses (find-relation 'f 2)) (list clause))))
+  
+  (test-case
+   "find-variables-in 1"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?z) (h ?z ?y)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "find-variables-in 2"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x 1) (h 1 2)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 2)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y))))
+
+
+  (test-case
+   "find-variables-in 3"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y ?z)))
+   (define vars (find-variables-in clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?z))))
+
+    
+  (test-case
+   "variables 1"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?z) (h ?z ?y)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "variables 2"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x 1) (h 1 2)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 2)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y))))
+
+
+  (test-case
+   "variables 3"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y ?z)))
+   (define vars (variables clause))
+   (check-pred set? vars)
+   (check-equal? (set-count vars) 3)
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?x)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?y)))
+   (check-true (for/or ([var (in-set vars)])
+		 (equal? (name var) '?z))))
+
+  (test-case
+   "fresh-variables-for"
+   (clear-all-relations)
+   (define clause (:- (f ?x ?y) (g ?x ?y)))
+   (define vars (fresh-variables-for clause))
+   (check-equal? (length vars) 2)
+   (for ([binding (in-list vars)])
+     (check-true (logic-variable? (car binding)))
+     (check-true (logic-variable? (cdr binding)))
+     (check-not-eq? (car binding) (cdr binding))
+     (check-eq? (name (car binding)) (name (cdr binding)))))
+
+  (test-case
+   "rename-variables"
+   (clear-all-relations)
+   (define clause-1 (:- (f ?x ?y) (g ?x ?y)))
+   (define clause-2 (rename-variables clause-1))
+   (check-renamed-variables (head clause-1) (head clause-2))
+   (check-renamed-variables (body clause-1) (body clause-2))))
+
+
+(define-test-suite unification-suite
+  (test-case
+   "get-binding"
+   (check equal? (get-binding '?x '((?x . 1) (?y . 2) (?z . 3))) '(?x . 1))
+   (check equal? (get-binding '?y '((?x . 1) (?y . 2) (?z . 3))) '(?y . 2))
+   (check equal? (get-binding '?z '((?x . 1) (?y . 2) (?z . 3))) '(?z . 3))
+   (check eq? (get-binding '?a '((?x . 1) (?y . 2) (?z . 3))) #f))
+
+  (test-case
+   "binding-val"
+   (check eqv? (binding-val '(?x . y)) 'y))
+
+  (test-case
+   "lookup"
+   (check equal? (lookup '?x '((?x . 1) (?y . 2) (?z . 3))) 1)
+   (check equal? (lookup '?y '((?x . 1) (?y . 2) (?z . 3))) 2)
+   (check equal? (lookup '?z '((?x . 1) (?y . 2) (?z . 3))) 3))
+
+  (test-case
+   "extend-bindings"
+   (check equal? (extend-bindings '?x 'y '()) '((?x . y)))
+   (check equal? (extend-bindings '?x 'y '((?a . b)))
+	  '((?x . y)  (?a . b))))
+
+  (test-case
+   "unify-variable"
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define z (make <logic-variable> :name '?z))
+   (define bindings `((,x . ,y)))
+   (check equal? (unify-variable x x bindings) bindings)
+   (check equal? (unify-variable y y bindings) bindings)
+   (check equal? (unify-variable z z bindings) bindings)
+   (check equal? (unify-variable x z bindings) `((,y . ,z) ,@bindings))
+   (check equal? (unify-variable x y bindings) bindings)
+   (check equal? (unify-variable y x bindings) bindings))
+
+  (test-case
+   "unify"
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define z (make <logic-variable> :name '?z))
+   (check equal? (unify `(+ ,x 1) `(+ 2 ,y)) `((,y . 1) (,x . 2)))
+   (check equal? (unify `,x `,y) `((,x . ,y)))
+   (check equal? (unify `(,x ,x) `(,y ,y)) `((,x . ,y)))
+   (check equal? (unify `(,x ,x ,x) `(,y ,y ,y)) `((,x . ,y)))
+   (check equal? (unify `(,x ,y) `(,y ,x)) `((,x . ,y)))
+   (check-false (unify 1 2))
+   (check-false (unify `(f ,x) `(g ,x)))
+   (check-false (unify x `(f ,x))))
+
+  ;; TODO: Tests for occurs check.
+
+  (test-case
+   "subst-bindings"
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (define bindings `((,x . 1)))
+   (check equal? (subst-bindings x bindings) 1)
+   (check equal? (subst-bindings y bindings) y)
+   (check eq? (subst-bindings y  bindings) y)
+   (check equal? (subst-bindings `(a ,y ,x) bindings) `(a ,y 1))
+   (let ([my-term `(a ,y 1)])
+     (check eq? (subst-bindings my-term bindings) my-term)))
+
+  (test-case
+   "apply-unifier"
+   (define x (make <logic-variable> :name '?x))
+   (define y (make <logic-variable> :name '?y))
+   (check equal? (apply-unifier `(,x 1) `(f ,y)) '(f 1))
+   (check equal? (apply-unifier `(,x 1) `(,y 1)) `(,y 1))
+   (check-false (apply-unifier `(,x 1) `(,y 2)))
+   (check-false (apply-unifier `(,x 1) `(,y 1 2)))
+   (check-false (apply-unifier `(,x 1 2) `(,y 1)))
+   ;; This will run into an endless loop if occurs check is disabled...
+   (perform-occurs-check? #t)
+   (check-false (apply-unifier x `(f ,x)))))
+
+
+(define-test-suite logic-suite
+  unification-suite
+  relations-suite)
+
+;;; TODO: delete this when the main implementation work is done and
+;;; the test suite is integrated into the Poem tests.
+#;(printf "\nRunning tests for logic.poem\n")
+#;(run-tests logic-suite)
+
