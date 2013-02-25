@@ -3,7 +3,7 @@
 (provide <var>
          var?
          value set-value!
-         atomically locally
+         locally
          var-hash ;; for debugging
          get-var-hash-counter
          freeze
@@ -97,18 +97,6 @@
   (define value (getarg initargs :value no-initarg))
   (unless (eq? value no-initarg)
     (set-value! var value)))
-
-(define-syntax atomically
-  (syntax-rules ()
-    [(_ body ...)
-     (block
-       (define entry-var-hash (var-hash))
-       (dynamic-wind
-	 (thunk
-	  (var-hash entry-var-hash))
-	 (thunk body ...)
-	 (thunk
-	  (set! entry-var-hash (var-hash)))))]))
 
 (define-syntax locally
   (syntax-rules ()

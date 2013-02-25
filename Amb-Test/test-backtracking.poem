@@ -434,6 +434,31 @@
       foo   a bar
       foo   a bar
       foo   a bar
+      foo   b bar)))
+
+  (test-case
+   "Amb Test 30a"
+   (define v (make <var> :value 'xxx))
+   (check-equal?
+    (collect ((make <ids>))
+	     (amb (deliver (begin (setf! (value v) 'a)
+				  'a))
+		  (deliver (begin (setf! (value v) 'b)
+				  'b)))
+	     (deliver (amb (begin
+			     (setf! (value v) 'a)
+			     (if (equal? (value v) 'a) 1 11))
+			   (begin
+			     (setf! (value v) 'b)
+			     (if (equal? (value v) 'a) 2 22))))
+
+	     (amb 'foo (value v) 'bar)) 
+    '(  a   b
+        1  22
+        1  22
+      foo   a bar
+      foo   b bar
+      foo   a bar
       foo   b bar))))
 
 (define-test-suite medium-amb-suite
